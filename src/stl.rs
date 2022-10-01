@@ -1,12 +1,66 @@
-use std::fs::File;
-use std::io;
-use std::io::prelude::*;
-use std::path::Path;
+use ordered_float::OrderedFloat;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::prelude::*;
+use std::io;
+use std::path::Path;
+use std::string::FromUtf8Error;
 
 use crate::fwd::{Vertex3D};
 use crate::model::{Mesh, VertexInfo, FaceInfo};
 
+pub fn mesh_from_stl(path: &Path) -> Result<Mesh, String> {
+    Ok(mesh_from_facets(facets_from_stl(path)?))
+}
+
+#[derive(Default, Copy, Clone)]
+pub struct Facet {
+    pub data: [Vertex3D; 3]
+}
+
+fn facets_from_stl(path: &Path) -> Result<Vec<Facet>, String> {
+    match get_stl_encoding(path)? {
+        StlEncoding::Ascii =>  { facets_from_ascii_stl(path) }
+        StlEncoding::Binary => { facets_from_binary_stl(path) }
+    }
+}
+
+enum StlEncoding {
+    Ascii,
+    Binary
+}
+
+/// Returns StlEncoding::Ascii if the file begins with 'solid', else StlEncoding::Binary
+///
+fn get_stl_encoding(path: &Path) -> Result<StlEncoding, String> {
+    // todo: this could take an open File handle instead of a Path
+    let mut file = File::open(&path).unwrap();
+
+    let parsed_header = {
+        let mut bytes = [0; 5];
+        file.read_exact(&mut bytes);
+        String::from_utf8(Vec::from(bytes))
+    };
+
+    match parsed_header {
+        Err(msg) => {  Err(msg.to_string()) }
+
+        Ok(header) => {
+            let encoding = {
+                if header == "solid" {
+                    StlEncoding::Ascii
+                } else {
+                    StlEncoding::Binary
+                }
+            };
+
+            Ok(encoding)
+        }
+    }
+}
+
+/// Defines the states of an STL parser.
+///
 enum ParseMode {
     ExpectingSolidStart,
     ExpectingStartOfFacetOrEndOfSolid,
@@ -17,64 +71,20 @@ enum ParseMode {
     Done
 }
 
-#[derive(Default, Copy, Clone)]
-pub struct Facet {
-    pub data: [Vertex3D; 3]
+/// A simple parser for binary STL files.
+///
+/// see: https://en.wikipedia.org/wiki/STL_(file_format)#Binary_STL
+///
+fn facets_from_binary_stl(_path: &Path) -> Result<Vec<Facet>, String> {
+    panic!("not implemented!");
 }
 
-use ordered_float::OrderedFloat;
-
-/// To hash a vertex, we need to wrap it in an OrderedFloat because f32 doesn't have the
-/// necessary comparison operators.
-fn to_hashable(v: Vertex3D) -> [OrderedFloat<f32>; 3] {
-    [OrderedFloat(v.x), OrderedFloat(v.y), OrderedFloat(v.z)]
-}
-
-pub fn mesh_from_stl(path: &Path) -> Result<Mesh, String> {
-    // TODO: we need to determine if the mesh is an ascii STL or a binary STL.
-    //
-    // Next steps:
-    //      - read the first N bytes of the file and look for a particular header.
-    //      - dispatch the correct parser based on the file encoding (ascii or binary).
-    //      - make the _ascii functions private as we should only need the one interface
-    //        for parsing .stl files.
-    match facets_from_ascii_stl(path) {
-        Err(e) => Err(e),
-        // Build up the mesh geometry and connectivity of the facets
-        Ok(facets) => {
-            let mut vertices : Vec<VertexInfo> = vec![];
-            let mut vert_lookup = HashMap::new();
-            let mut faces = vec![];
-
-            for facet in facets {
-                let face_i = faces.len();
-
-                // Build up the list of vertices, de-duplicating them if need be.
-                let vs : Vec<usize> = (0..3usize).map( |i| {
-                    let key = to_hashable(facet.data[i]);
-
-                    if !vert_lookup.contains_key(&key) {
-                        vert_lookup.insert(key, vert_lookup.len());
-                        vertices.push(VertexInfo{ vtx: facet.data[i], faces: vec![] });
-                    }
-
-                    let vert_i = vert_lookup.get(&key).unwrap();
-
-                    vertices.get_mut(*vert_i).unwrap().faces.push(face_i);
-
-                    *vert_i
-                }).collect();
-
-                faces.push(FaceInfo{ vertices: [vs[0], vs[1], vs[2]] });
-            }
-
-            Ok(Mesh{faces, vertices})
-        }
-    }
-}
-
-pub fn facets_from_ascii_stl(path: &Path) -> Result<Vec<Facet>, String> {
-    let mut file = File::open(&path).unwrap();
+/// A simple parser for ascii STL files.
+///
+/// see: https://en.wikipedia.org/wiki/STL_(file_format)#ASCII_STL
+///
+fn facets_from_ascii_stl(path: &Path) -> Result<Vec<Facet>, String> {
+    let mut file = File::open(&path).unwrap(); // todo: this could take an open File handle instead of a Path
 
     let mut mode = ParseMode::ExpectingSolidStart;
 
@@ -161,4 +171,40 @@ pub fn facets_from_ascii_stl(path: &Path) -> Result<Vec<Facet>, String> {
     }
 
     Ok(facets)
+}
+
+fn to_hashable(v: Vertex3D) -> (OrderedFloat<f32>, OrderedFloat<f32>, OrderedFloat<f32>) {
+    (OrderedFloat::from(v.x), OrderedFloat::from(v.y), OrderedFloat::from(v.z))
+}
+
+/// Builds face-vertex mesh from list of facets.
+///
+fn mesh_from_facets(facets: Vec<Facet>) -> Mesh {
+    let mut vertices : Vec<VertexInfo> = vec![];
+    let mut vert_lookup = HashMap::new();
+    let mut faces = vec![];
+
+    for facet in facets {
+        let face_i = faces.len();
+
+        // Build up the list of vertices, de-duplicating them if need be.
+        let vs : Vec<usize> = (0..3usize).map( |i| {
+            let key = to_hashable(facet.data[i]);
+
+            if !vert_lookup.contains_key(&key) {
+                vert_lookup.insert(key, vert_lookup.len());
+                vertices.push(VertexInfo{ vtx: facet.data[i], faces: vec![] });
+            }
+
+            let vert_i = vert_lookup.get(&key).unwrap();
+
+            vertices.get_mut(*vert_i).unwrap().faces.push(face_i);
+
+            *vert_i
+        }).collect();
+
+        faces.push(FaceInfo{ vertices: [vs[0], vs[1], vs[2]] });
+    }
+
+    Mesh{faces, vertices}
 }

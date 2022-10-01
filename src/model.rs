@@ -14,15 +14,14 @@ pub struct FaceInfo {
     pub vertices: [usize; 3]
 }
 
-// This mesh repr is a mesh-vertex representation
+/// Defines a face-vertex mesh representation.
+///
+/// see: https://en.wikipedia.org/wiki/Polygon_mesh#Face-vertex_meshes
+///
 #[derive(Clone)]
 pub struct Mesh {
     pub faces: Vec<FaceInfo>,
     pub vertices: Vec<VertexInfo>
-}
-
-impl Mesh {
-    pub fn get_vertex(&self, i: usize) -> &Vertex3D { &self.vertices[i].vtx }
 }
 
 #[derive(Copy, Clone)]
@@ -31,6 +30,10 @@ pub struct Transformation {
     pub rotation: Option<Matrix4<f32>>,
     pub scale: Option<f32>,
     pub translation: Option<Vector3<f32>>
+}
+
+impl Mesh {
+    pub fn get_vertex(&self, i: usize) -> &Vertex3D { &self.vertices[i].vtx }
 }
 
 impl Transformation {
