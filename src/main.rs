@@ -1,12 +1,13 @@
 use std::path::Path;
 use image::{ImageBuffer, RgbImage, Rgb};
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use vox::camera::Viewport;
 
 use vox::grr;
-use vox::fwd::{Vertex2D, Triangle2D, Vertex3D};
+use vox::fwd::raster;
+use vox::camera;
 
-use vox::stl::facets_from_ascii_stl;
+use vox::stl::{mesh_from_stl};
 
 use rand::Rng;
 
@@ -17,9 +18,9 @@ fn main() {
 
     // let tri = Triangle2D {
     //     points: (
-    //         Vertex2D{x: 10, y: 10 },
-    //         Vertex2D{ x: 400, y: 80 },
-    //         Vertex2D{ x: 200, y: 300 }
+    //         Pixel{x: 10, y: 10 },
+    //         Pixel{ x: 400, y: 80 },
+    //         Pixel{ x: 200, y: 300 }
     //     )
     // };
 
@@ -32,6 +33,8 @@ fn main() {
         h: 1.0
     };
 
+    let camera_view = camera::Camera{ location: Point3::from([0.0,0.0,0.0]) }.looking_at(Point3::from([0.0,0.0,1.0]));
+
     let canvas = (512, 512);
 
     let mut random_col = || -> Rgb<u8> {
@@ -41,46 +44,25 @@ fn main() {
         Rgb::from([r, g, b])
     };
 
-    // front vertices
-    // let vAf = view.point_projection_canvas(Vector3::from([-2.0, -0.5, 5.0]), &canvas);
-    // let vBf = view.point_projection_canvas(Vector3::from([-2.0,  0.5, 5.0]), &canvas);
-    // let vCf = view.point_projection_canvas(Vector3::from([-1.0,  0.5, 5.0]), &canvas);
-    // let vDf = view.point_projection_canvas(Vector3::from([-1.0, -0.5, 5.0]), &canvas);
-    //
-    // // back vertices
-    // let vAb = view.point_projection_canvas(Vector3::from([-2.0, -0.5, 6.0]), &canvas);
-    // let vBb = view.point_projection_canvas(Vector3::from([-2.0,  0.5, 6.0]), &canvas);
-    // let vCb = view.point_projection_canvas(Vector3::from([-1.0,  0.5, 6.0]), &canvas);
-    // let vDb = view.point_projection_canvas(Vector3::from([-1.0, -0.5, 6.0]), &canvas);
-    //
-    // grr::render_line(&mut img, vAf, vBf);
-    // grr::render_line(&mut img, vBf, vCf);
-    // grr::render_line(&mut img, vCf, vDf);
-    // grr::render_line(&mut img, vDf, vAf);
-    //
-    // grr::render_line(&mut img, vAb, vBb);
-    // grr::render_line(&mut img, vBb, vCb);
-    // grr::render_line(&mut img, vCb, vDb);
-    // grr::render_line(&mut img, vDb, vAb);
-    //
-    // img.save("fractal.png").unwrap();
+    let mesh = mesh_from_stl(Path::new("/Users/matthewnielsen/Documents/cube_ascii.stl")).unwrap();
 
-    let facets = facets_from_ascii_stl(Path::new("/Users/matthewnielsen/Documents/cube_ascii.stl")).unwrap();
+    // todo: we need to use nalgebra::Isometry3 transformation matrices.
+    let transformation = nalgebra::Isometry3::translation(1.0, 1.5, 5.0);
 
-    for facet in facets {
-        let p1 = view.point_projection_canvas(facet.data[0] - Vector3::from([-1.0, 1.5, -5.0]), &canvas);
-        let p2 = view.point_projection_canvas(facet.data[1] - Vector3::from([-1.0, 1.5, -5.0]), &canvas);
-        let p3 = view.point_projection_canvas(facet.data[2] - Vector3::from([-1.0, 1.5, -5.0]), &canvas);
+    for face in &mesh.faces {
+        let p1 = transformation.transform_point(mesh.get_vertex(face.vertices[0]));
+        let p2 = transformation.transform_point(mesh.get_vertex(face.vertices[1]));
+        let p3 = transformation.transform_point(mesh.get_vertex(face.vertices[2]));
 
-        let tri = Triangle2D{points: (p1, p2, p3)};
-
+        let p1 = view.point_projection_canvas(p1, &canvas);
+        let p2 = view.point_projection_canvas(p2, &canvas);
+        let p3 = view.point_projection_canvas(p3, &canvas);
+        //
+        let tri = raster::Triangle2D{points: (p1, p2, p3)};
+        //
         // grr::render_triangle(&mut img, &tri, Rgb([64, 235, 52]));
         grr::render_triangle_wireframe(&mut img, &tri, random_col());
-
-        // grr::render_line(&mut img, p1, p2);
-        // grr::render_line(&mut img, p2, p3);
-        // grr::render_line(&mut img, p3, p1);
     }
 
-    img.save("fractal.png").unwrap();
+    img.save("scene.png").unwrap();
 }

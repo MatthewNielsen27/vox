@@ -2,12 +2,10 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
-
-use crate::model::{Mesh, VertexInfo, FaceInfo};
-
 use std::collections::HashMap;
-use nalgebra::Vector3;
-use crate::fwd::Vertex3D;
+
+use crate::fwd::{Vertex3D};
+use crate::model::{Mesh, VertexInfo, FaceInfo};
 
 enum ParseMode {
     ExpectingSolidStart,
@@ -21,21 +19,29 @@ enum ParseMode {
 
 #[derive(Default, Copy, Clone)]
 pub struct Facet {
-    pub data: [Vector3<f32>; 3]
+    pub data: [Vertex3D; 3]
 }
 
 use ordered_float::OrderedFloat;
 
-fn to_hashable(v: Vector3<f32>) -> [OrderedFloat<f32>; 3] {
+/// To hash a vertex, we need to wrap it in an OrderedFloat because f32 doesn't have the
+/// necessary comparison operators.
+fn to_hashable(v: Vertex3D) -> [OrderedFloat<f32>; 3] {
     [OrderedFloat(v.x), OrderedFloat(v.y), OrderedFloat(v.z)]
 }
 
-pub fn model_from_stl(path: &Path) -> Result<Mesh, String> {
+pub fn mesh_from_stl(path: &Path) -> Result<Mesh, String> {
+    // TODO: we need to determine if the mesh is an ascii STL or a binary STL.
+    //
+    // Next steps:
+    //      - read the first N bytes of the file and look for a particular header.
+    //      - dispatch the correct parser based on the file encoding (ascii or binary).
+    //      - make the _ascii functions private as we should only need the one interface
+    //        for parsing .stl files.
     match facets_from_ascii_stl(path) {
         Err(e) => Err(e),
+        // Build up the mesh geometry and connectivity of the facets
         Ok(facets) => {
-            // --
-            // Now ne need to build up the index lists and such
             let mut vertices : Vec<VertexInfo> = vec![];
             let mut vert_lookup = HashMap::new();
             let mut faces = vec![];

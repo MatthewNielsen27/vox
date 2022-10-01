@@ -1,31 +1,24 @@
 extern crate nalgebra as na;
 
-use na::{Vector3, Rotation3};
+pub type Vertex3D = na::Point3<f32>;
 
-// type Vertex2D = Vector2<i32>;
-pub type Vertex3D = Vector3<f32>;
+pub mod raster {
+    #[derive(Copy, Clone)]
+    pub struct Pixel {
+        pub x: i32,
+        pub y: i32
+    }
 
-pub struct Triangle3D {
-    pub vertices: Vector3<Vertex3D>
-}
+    #[derive(Copy, Clone)]
+    pub struct Triangle2D {
+        pub points: (Pixel, Pixel, Pixel)
+    }
 
-// todo: these need to be named to be more specific to raster-land
-
-#[derive(Copy, Clone)]
-pub struct Vertex2D {
-    pub x: i32,
-    pub y: i32
-}
-
-#[derive(Copy, Clone)]
-pub struct Triangle2D {
-    pub points: (Vertex2D, Vertex2D, Vertex2D)
-}
-
-#[derive(Copy, Clone)]
-pub struct HLine{
-    pub l: Vertex2D,
-    pub r: Vertex2D
+    #[derive(Copy, Clone)]
+    pub struct ScanlineH {
+        pub l: Pixel,
+        pub r: Pixel
+    }
 }
 
 #[derive(Copy, Clone)]

@@ -1,9 +1,9 @@
 use std::iter::{zip};
 use image::{Pixel, Rgb};
 
-use crate::fwd::{Vertex2D, Triangle2D, HLine, LinearIntensity};
+use crate::fwd::{raster, LinearIntensity};
 
-pub fn line_between(p1: Vertex2D, p2: Vertex2D) -> Vec<Vertex2D> {
+pub fn line_between(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     return if (p2.y - p1.y).abs() < (p2.x - p1.x).abs() {
         if p2.x > p1.x {
             pll(p1, p2)
@@ -19,7 +19,7 @@ pub fn line_between(p1: Vertex2D, p2: Vertex2D) -> Vec<Vertex2D> {
     };
 }
 
-fn pll(p1: Vertex2D, p2: Vertex2D) -> Vec<Vertex2D> {
+fn pll(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     let dx  = (p2.x - p1.x) as i32;
     let mut dy = (p2.y - p1.y) as i32;
     let mut yi :i32 = 1;
@@ -34,7 +34,7 @@ fn pll(p1: Vertex2D, p2: Vertex2D) -> Vec<Vertex2D> {
     let mut points = vec![];
 
     for x in p1.x..p2.x {
-        points.push(Vertex2D{x, y});
+        points.push(raster::Pixel{x, y});
 
         if d > 0 {
             y += yi;
@@ -47,7 +47,7 @@ fn pll(p1: Vertex2D, p2: Vertex2D) -> Vec<Vertex2D> {
     points
 }
 
-fn plh(p1: Vertex2D, p2: Vertex2D) -> Vec<Vertex2D> {
+fn plh(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     let mut dx  = (p2.x - p1.x) as i32;
     let dy = (p2.y - p1.y) as i32;
     let mut xi :i32 = 1;
@@ -62,7 +62,7 @@ fn plh(p1: Vertex2D, p2: Vertex2D) -> Vec<Vertex2D> {
     let mut points = vec![];
 
     for y in p1.y..p2.y {
-        points.push(Vertex2D{x, y});
+        points.push(raster::Pixel{x, y});
 
         if d > 0 {
             x += xi;
@@ -77,10 +77,10 @@ fn plh(p1: Vertex2D, p2: Vertex2D) -> Vec<Vertex2D> {
 
 use std::mem;
 
-pub fn interp_points(p0: Vertex2D, p1: Vertex2D) -> Vec<Vertex2D> {
+pub fn interp_points(p0: raster::Pixel, p1: raster::Pixel) -> Vec<raster::Pixel> {
     linspace_sample(p0.y, p0.x as f32, p1.y, p1.x as f32)
         .iter()
-        .map(|(y,x)| Vertex2D{x: *x as i32, y: *y})
+        .map(|(y,x)| raster::Pixel{x: *x as i32, y: *y})
         .collect()
 }
 
@@ -104,13 +104,13 @@ pub fn linspace_sample(
     let m = (y1 - y0) / (x1 - x0) as f32;
     let b = y0 - (m * x0 as f32);
 
-    (x0..x1).map(|x| {
+    (x0..(x1+1)).map(|x| {
         (x, ((m * x as f32) + b))
     }).collect()
 }
 
 /// Fill a triangle
-pub fn fill(raw_tri: &Triangle2D) -> Vec<HLine> {
+pub fn fill(raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
     // --
     // Now let's sort the vertices in ascending order
     let tri = {
@@ -129,6 +129,7 @@ pub fn fill(raw_tri: &Triangle2D) -> Vec<HLine> {
 
     let p012 = {
         let mut tmp = interp_points(tri.points.0, tri.points.1);
+        tmp.pop(); // This is because tmp[-1] == tmp_12[0]
         let mut tmp_12 = interp_points(tri.points.1, tri.points.2);
         tmp.append(&mut tmp_12);
         tmp
@@ -136,8 +137,7 @@ pub fn fill(raw_tri: &Triangle2D) -> Vec<HLine> {
 
     let p02 = interp_points(tri.points.0, tri.points.2);
 
-    // todo: I need to figure out why p012 != p02
-    // assert_eq!(p012.len(), p02.len());
+    assert_eq!(p012.len(), p02.len());
 
     // --
     // Now we need to determine the left and right sets of points
@@ -149,10 +149,10 @@ pub fn fill(raw_tri: &Triangle2D) -> Vec<HLine> {
         mem::swap(&mut lefts, &mut rights);
     }
 
-    zip(lefts, rights).map(|p| HLine{l: p.0, r: p.1}).collect()
+    zip(lefts, rights).map(|p| raster::ScanlineH{l: p.0, r: p.1}).collect()
 }
 
-pub fn fill_shader(raw_tri: &Triangle2D, raw_shader: (f32, f32, f32)) -> Vec<(HLine, LinearIntensity)> {
+pub fn fill_shader(raw_tri: &raster::Triangle2D, raw_shader: (f32, f32, f32)) -> Vec<(raster::ScanlineH, LinearIntensity)> {
     // --
     // Now let's sort the vertices/shader in ascending order
     let (tri, shader) = {
@@ -181,6 +181,7 @@ pub fn fill_shader(raw_tri: &Triangle2D, raw_shader: (f32, f32, f32)) -> Vec<(HL
 
     let p012 = {
         let mut tmp = interp_points(tri.points.0, tri.points.1);
+        tmp.pop(); // This is because tmp[-1] == tmp_12[0]
         let mut tmp_12 = interp_points(tri.points.1, tri.points.2);
         tmp.append(&mut tmp_12);
         tmp
@@ -188,6 +189,7 @@ pub fn fill_shader(raw_tri: &Triangle2D, raw_shader: (f32, f32, f32)) -> Vec<(HL
 
     let h012 = {
         let mut tmp = linspace_sample(tri.points.0.y, shader.0, tri.points.1.y, shader.1);
+        tmp.pop(); // This is because tmp[-1] == tmp_12[0]
         let mut tmp_12 = linspace_sample(tri.points.1.y, shader.1, tri.points.2.y, shader.2);
         tmp.append(&mut tmp_12);
         tmp
@@ -220,14 +222,14 @@ pub fn fill_shader(raw_tri: &Triangle2D, raw_shader: (f32, f32, f32)) -> Vec<(HL
         zip(lefts_h, rights_h)
     ).map(|(points, intensities)| {
         (
-            HLine{l: points.0, r: points.1},
+            raster::ScanlineH{l: points.0, r: points.1},
             LinearIntensity{l: intensities.0.1, r: intensities.1.1}
         )
     }).collect()
 }
 
 // render pixel to image
-pub fn render_pixel(img: &mut image::RgbImage, v: Vertex2D, c: Rgb<u8>) {
+pub fn render_pixel(img: &mut image::RgbImage, v: raster::Pixel, c: Rgb<u8>) {
     let x = (img.width() as i32 / 2) + v.x;
     let y = (img.height() as i32 / 2) - v.y - 1;
 
@@ -238,7 +240,7 @@ pub fn render_pixel(img: &mut image::RgbImage, v: Vertex2D, c: Rgb<u8>) {
     img.put_pixel(x as u32, y as u32, c);
 }
 
-pub fn render_line(img: &mut image::RgbImage, p1: Vertex2D, p2: Vertex2D) {
+pub fn render_line(img: &mut image::RgbImage, p1: raster::Pixel, p2: raster::Pixel) {
     for p in line_between(p1, p2) {
         render_pixel(img, p, Rgb([0, 255, 0]));
     }
@@ -250,7 +252,7 @@ pub fn render_line(img: &mut image::RgbImage, p1: Vertex2D, p2: Vertex2D) {
 
 pub fn render_triangle(
     img: &mut image::RgbImage,
-    tri: &Triangle2D,
+    tri: &raster::Triangle2D,
     col: Rgb<u8>
 ) {
     render_triangle_fill(img, tri, col);
@@ -259,7 +261,7 @@ pub fn render_triangle(
 // todo: see if we need to render the wireframe as well...
 pub fn render_triangle_shader(
     img: &mut image::RgbImage,
-    tri: &Triangle2D,
+    tri: &raster::Triangle2D,
     col: Rgb<u8>,
     shader: (f32, f32, f32)
 ) {
@@ -268,19 +270,19 @@ pub fn render_triangle_shader(
 
 fn render_triangle_fill(
     img: &mut image::RgbImage,
-    tri: &Triangle2D,
+    tri: &raster::Triangle2D,
     col: Rgb<u8>
 ) {
     for line in fill(tri) {
         for x in line.l.x..line.r.x {
-            render_pixel(img, Vertex2D{x, y: line.l.y}, col)
+            render_pixel(img, raster::Pixel{x, y: line.l.y}, col)
         }
     }
 }
 
 fn render_triangle_fill_shader(
     img: &mut image::RgbImage,
-    tri: &Triangle2D,
+    tri: &raster::Triangle2D,
     col: Rgb<u8>,
     shader: (f32, f32, f32)
 ) {
@@ -291,14 +293,14 @@ fn render_triangle_fill_shader(
             let mut c = col.clone();
             c.apply(|chan| (chan as f32 * h) as u8);
 
-            render_pixel(img, Vertex2D{x, y: line.l.y}, c);
+            render_pixel(img, raster::Pixel{x, y: line.l.y}, c);
         }
     }
 }
 
 pub fn render_triangle_wireframe(
     img: &mut image::RgbImage,
-    tri: &Triangle2D,
+    tri: &raster::Triangle2D,
     col: Rgb<u8>
 ) {
     [
