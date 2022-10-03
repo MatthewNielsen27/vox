@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use crate::fwd::{Vertex3D};
 
-use nalgebra::{Vector3, Quaternion, Matrix4};
+use nalgebra::{Vector3, Matrix4};
 
 #[derive(Clone)]
 pub struct VertexInfo {
