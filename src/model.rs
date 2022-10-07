@@ -1,17 +1,29 @@
 use std::sync::Arc;
 use crate::fwd::{Vertex3D};
 
-use nalgebra::{Vector3, Matrix4};
+use nalgebra as na;
 
 #[derive(Clone)]
 pub struct VertexInfo {
-    pub vtx: Vertex3D,
+    pub vtx: VertexModel,
     pub faces: Vec<usize>
 }
 
 #[derive(Copy, Clone)]
 pub struct FaceInfo {
     pub vertices: [usize; 3]
+}
+
+#[derive(Copy, Clone)]
+pub struct VertexModel(pub Vertex3D);
+
+#[derive(Copy, Clone)]
+pub struct VertexWorld(pub Vertex3D);
+
+impl VertexModel {
+    pub fn to_world(&self, transform: &na::Isometry3<f32>) -> VertexWorld {
+        VertexWorld(transform.transform_point(&self.0))
+    }
 }
 
 /// Defines a face-vertex mesh representation.
@@ -24,48 +36,34 @@ pub struct Mesh {
     pub vertices: Vec<VertexInfo>
 }
 
-#[derive(Copy, Clone)]
-pub struct Transformation {
-    // Orientation transformation is represented
-    pub rotation: Option<Matrix4<f32>>,
-    pub scale: Option<f32>,
-    pub translation: Option<Vector3<f32>>
-}
-
 impl Mesh {
-    pub fn get_vertex(&self, i: usize) -> &Vertex3D { &self.vertices[i].vtx }
-}
-
-impl Transformation {
-    // Returns true if the transformation is empty
-    pub fn is_unity(&self) -> bool {
-        self.rotation.is_none()
-        &&  self.scale.is_none()
-        &&  self.translation.is_none()
-    }
-
-    // Returns combines the transformation
-    pub fn get(&self) -> Option<Matrix4<f32>> {
-        if self.is_unity() {
-            return None;
-        }
-
-        let mut mat = nalgebra::Matrix4::new_scaling(self.scale.unwrap_or(1.0));
-
-        if self.translation.is_some() {
-            mat = mat.append_translation(&self.translation.unwrap());
-        }
-
-        if self.rotation.is_some() {
-            mat = mat * self.rotation.unwrap();
-        }
-
-        Some(mat)
+    pub fn get_vertex(&self, i: usize) -> &VertexModel {
+        &self.vertices[i].vtx
     }
 }
 
 #[derive(Clone)]
 pub struct Model {
     pub mesh: Arc<Mesh>,
-    pub transform: Transformation
+    pub transform: na::Isometry3<f32>
+}
+
+impl Model {
+    pub fn triangles(&self) -> impl Iterator<Item = (&VertexModel,&VertexModel,&VertexModel)> {
+        self.mesh.faces.iter().enumerate().map(|(i, face)| {
+            let v0 = &self.mesh.vertices[face.vertices[0]].vtx;
+            let v1 = &self.mesh.vertices[face.vertices[1]].vtx;
+            let v2 = &self.mesh.vertices[face.vertices[2]].vtx;
+            (v0, v1, v2)
+        })
+    }
+
+    pub fn triangles_world(&self) -> impl Iterator<Item = (VertexWorld,VertexWorld,VertexWorld)> + '_ {
+        self.mesh.faces.iter().enumerate().map(|(i, face)| {
+            let v0 = &self.mesh.vertices[face.vertices[0]].vtx;
+            let v1 = &self.mesh.vertices[face.vertices[1]].vtx;
+            let v2 = &self.mesh.vertices[face.vertices[2]].vtx;
+            (v0.to_world(&self.transform), v1.to_world(&self.transform), v2.to_world(&self.transform))
+        })
+    }
 }

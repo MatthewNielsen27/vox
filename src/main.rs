@@ -12,19 +12,15 @@ use vox::stl::{mesh_from_stl};
 use rand::Rng;
 
 fn main() {
-    let mut img: RgbImage = ImageBuffer::new(512, 512);
+    let mut img: RgbImage = ImageBuffer::new(1600, 900);
 
     let mut rng = rand::thread_rng();
 
-    let view = Viewport{
-        d: 1.0,
-        w: 1.0,
-        h: 1.0
+    let viewport = Viewport{
+        z_minmax: (0.0, 1.0),
+        size: (1600, 900),
+        upper_left: (0, 0)
     };
-
-    let camera_view = camera::Camera{ location: Point3::from([0.0,0.0,0.0]) }.looking_at(Point3::from([0.0,0.0,1.0]));
-
-    let canvas = (512, 512);
 
     let mut random_col = || -> Rgb<u8> {
         let r: u8 = rng.gen();
@@ -33,30 +29,53 @@ fn main() {
         Rgb::from([r, g, b])
     };
 
+    // Our camera looks toward the point (1.0, 0.0, 0.0).
+    // It is located at (0.0, 0.0, 1.0).
+    let eye    = Point3::new(4.0, -1.5, -2.0);
+    let target = Point3::new(0.0, 0.0, 0.0);
+    let view   = nalgebra::Isometry3::look_at_rh(&eye, &target, &Vector3::y());
+
+    // A perspective projection.
+    let projection = nalgebra::Perspective3::new(16.0 / 9.0, 3.14 / 2.0, 1.0, 1000.0);
+
     let mesh = mesh_from_stl(Path::new("resources/cube_ascii.stl")).unwrap();
 
-    // todo: we need to use nalgebra::Isometry3 transformation matrices.
-    // let transformation = nalgebra::Isometry3::translation(1.0, 1.5, 5.0);
+    let world_from_model = nalgebra::Isometry3::translation(0.0, 0.0, 0.0);
+
+    // The combination of the model with the view is still an isometry.
+    let model_view = view * world_from_model;
+
+    // Convert everything to a `Matrix4` so that they can be combined.
+    let mat_model_view = model_view.to_homogeneous();
+
+    // Combine everything.
+    let model_view_projection = projection.as_matrix() * mat_model_view;
+
+    println!("{}", model_view_projection);
 
     for face in &mesh.faces {
-        let transformation = Vertex3D::from([-0.5, -0.5, 5.0]);
+        // This transforms the coordinate into NDC space (normalized-device-coordinate space)
+        let p0 = model_view_projection.transform_point(&mesh.get_vertex(face.vertices[0]).0);
+        let p1 = model_view_projection.transform_point(&mesh.get_vertex(face.vertices[1]).0);
+        let p2 = model_view_projection.transform_point(&mesh.get_vertex(face.vertices[2]).0);
 
-        // let p1 = transformation.transform_point(mesh.get_vertex(face.vertices[0]));
-        // let p2 = transformation.transform_point(mesh.get_vertex(face.vertices[1]));
-        // let p3 = transformation.transform_point(mesh.get_vertex(face.vertices[2]));
+        println!("{}", p0);
+        println!("{}", p1);
+        println!("{}", p2);
 
-        let p1 = Vertex3D::from(mesh.get_vertex(face.vertices[0]) - transformation);
-        let p2 = Vertex3D::from(mesh.get_vertex(face.vertices[1]) - transformation);
-        let p3 = Vertex3D::from(mesh.get_vertex(face.vertices[2]) - transformation);
+        let p0 = viewport.transform_point(&p0);
+        let p1 = viewport.transform_point(&p1);
+        let p2 = viewport.transform_point(&p2);
 
-        let p1 = view.point_projection_canvas(p1, &canvas);
-        let p2 = view.point_projection_canvas(p2, &canvas);
-        let p3 = view.point_projection_canvas(p3, &canvas);
+        let p0 = raster::Pixel{x: p0.x as i32, y: p0.y as i32};
+        let p1 = raster::Pixel{x: p1.x as i32, y: p1.y as i32};
+        let p2 = raster::Pixel{x: p2.x as i32, y: p2.y as i32};
+        // println!("triangle: <{},{}> <{},{}> <{},{}>", p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
+
         //
-        let tri = raster::Triangle2D{points: (p1, p2, p3)};
+        let tri = raster::Triangle2D{points: (p0, p1, p2)};
         //
-        // grr::render_triangle(&mut img, &tri, Rgb([64, 235, 52]));
-        grr::render_triangle_wireframe(&mut img, &tri, random_col());
+        grr::render_triangle(&mut img, &tri, random_col());
     }
 
     img.save("scene.png").unwrap();

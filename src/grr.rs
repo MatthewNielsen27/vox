@@ -230,14 +230,11 @@ pub fn fill_shader(raw_tri: &raster::Triangle2D, raw_shader: (f32, f32, f32)) ->
 
 // render pixel to image
 pub fn render_pixel(img: &mut image::RgbImage, v: raster::Pixel, c: Rgb<u8>) {
-    let x = (img.width() as i32 / 2) + v.x;
-    let y = (img.height() as i32 / 2) - v.y - 1;
-
-    if (x < 0 || x >= img.width() as i32) || (y < 0 || y >= img.height() as i32) {
+    if (v.x < 0 || v.x >= img.width() as i32) || (v.y < 0 || v.y >= img.height() as i32) {
         return;
     }
 
-    img.put_pixel(x as u32, y as u32, c);
+    img.put_pixel(v.x as u32, v.y as u32, c);
 }
 
 pub fn render_line(img: &mut image::RgbImage, p1: raster::Pixel, p2: raster::Pixel) {

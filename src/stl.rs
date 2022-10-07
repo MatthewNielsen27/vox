@@ -7,7 +7,7 @@ use std::path::Path;
 use std::string::FromUtf8Error;
 
 use crate::fwd::{Vertex3D};
-use crate::model::{Mesh, VertexInfo, FaceInfo};
+use crate::model::{Mesh, VertexInfo, FaceInfo, VertexModel};
 
 pub fn mesh_from_stl(path: &Path) -> Result<Mesh, String> {
     Ok(mesh_from_facets(facets_from_stl(path)?))
@@ -193,7 +193,7 @@ fn mesh_from_facets(facets: Vec<Facet>) -> Mesh {
 
             if !vert_lookup.contains_key(&key) {
                 vert_lookup.insert(key, vert_lookup.len());
-                vertices.push(VertexInfo{ vtx: facet.data[i], faces: vec![] });
+                vertices.push(VertexInfo{ vtx: VertexModel(facet.data[i]), faces: vec![] });
             }
 
             let vert_i = vert_lookup.get(&key).unwrap();
