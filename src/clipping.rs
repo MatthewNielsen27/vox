@@ -147,7 +147,7 @@ pub fn clip_triangle(
         let i_a = {
           if d0 > 0.0 {
               0
-          } else if d1 > 0.0{
+          } else if d1 > 0.0 {
               1
           } else {
               2

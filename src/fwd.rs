@@ -11,7 +11,7 @@ pub mod raster {
 
     #[derive(Copy, Clone)]
     pub struct Triangle2D {
-        pub points: (Pixel, Pixel, Pixel)
+        pub points: [Pixel; 3]
     }
 
     #[derive(Copy, Clone)]

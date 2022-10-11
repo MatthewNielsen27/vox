@@ -3,15 +3,14 @@ use nalgebra::{Vector3, Point3};
 #[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub struct Triangle<PointType>(pub [PointType; 3]);
 
-
 pub struct Plane {
     pub n: Vector3<f32>,
     pub d: f32
 }
 
 pub struct Ray {
-    pub(crate) direction: Vector3<f32>,
-    pub(crate) point: Point3<f32>
+    pub direction: Vector3<f32>,
+    pub point: Point3<f32>
 }
 
 impl Ray {
@@ -76,6 +75,6 @@ impl Plane {
 
         let point = ray.point - ray.direction.scale(prod3);
 
-        (IntersectionType::Single, Some(Point3::from([point.x, point.y, point.x])))
+        (IntersectionType::Single, Some(Point3::from([point.x, point.y, point.z])))
     }
 }

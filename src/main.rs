@@ -74,7 +74,7 @@ fn main() {
         // println!("triangle: <{},{}> <{},{}> <{},{}>", p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
 
         //
-        let tri = raster::Triangle2D{points: (p0, p1, p2)};
+        let tri = raster::Triangle2D{points: [p0, p1, p2]};
         //
         grr::render_triangle_wireframe(&mut img, &tri, random_col());
     }

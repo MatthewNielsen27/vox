@@ -8,4 +8,4 @@ pub mod camera;
 pub mod stl;
 pub mod clipping;
 pub mod geometry;
-
+pub mod debug_utils;

@@ -33,7 +33,7 @@ fn pll(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
 
     let mut points = vec![];
 
-    for x in p1.x..p2.x {
+    for x in p1.x..=p2.x {
         points.push(raster::Pixel{x, y});
 
         if d > 0 {
@@ -61,7 +61,7 @@ fn plh(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
 
     let mut points = vec![];
 
-    for y in p1.y..p2.y {
+    for y in p1.y..=p2.y {
         points.push(raster::Pixel{x, y});
 
         if d > 0 {
@@ -76,6 +76,7 @@ fn plh(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
 }
 
 use std::mem;
+use crate::fwd::raster::Triangle2D;
 
 pub fn interp_points(p0: raster::Pixel, p1: raster::Pixel) -> Vec<raster::Pixel> {
     linspace_sample(p0.y, p0.x as f32, p1.y, p1.x as f32)
@@ -92,7 +93,24 @@ pub fn linspace_sample(
     -> Vec<(i32, f32)>
 {
     if x1 == x0 {
-        return Vec::from([(x1, y1)]);
+        // While we could return either value in this case, we should return the first value because
+        // it works better for us.
+        //
+        // For example: We would get discontinuity when sampling the line segments AC and ABC of a
+        //              triangle.
+        //
+        //                                      a
+        //                                      |\
+        //                                      | \
+        //                                      |  \
+        //                                    b |___\ c
+        //
+        //        why?  Say that ABC is on the left of AC and the line BC is horizontal. If we
+        //              returned p1 instead of p0, then the last sample would jump across the
+        //              triangle to vertex C. Since the line AC ends on C, then we'd be missing
+        //              the last scanline of the triangle because the 2 points are the same.
+        //
+        return Vec::from([(x0, y0)]);
     }
 
     // reorder if need be
@@ -104,7 +122,7 @@ pub fn linspace_sample(
     let m = (y1 - y0) / (x1 - x0) as f32;
     let b = y0 - (m * x0 as f32);
 
-    (x0..(x1+1)).map(|x| {
+    (x0..=x1).map(|x| {
         (x, ((m * x as f32) + b))
     }).collect()
 }
@@ -114,28 +132,37 @@ pub fn fill(raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
     // --
     // Now let's sort the vertices in ascending order
     let tri = {
-        let mut tri = raw_tri.clone();
 
-        let y0 = raw_tri.points.0.y;
-        let y1 = raw_tri.points.1.y;
-        let y2 = raw_tri.points.2.y;
+        let mut i0 = 0;
+        let mut i1 = 1;
+        let mut i2 = 2;
 
-        if y1 < y0 { mem::swap(&mut tri.points.1, &mut tri.points.0); }
-        if y2 < y0 { mem::swap(&mut tri.points.2, &mut tri.points.0); }
-        if y2 < y1 { mem::swap(&mut tri.points.2, &mut tri.points.1); }
+        if raw_tri.points[1].y > raw_tri.points[0].y { mem::swap(&mut i1, &mut i0); }
+        if raw_tri.points[2].y > raw_tri.points[0].y { mem::swap(&mut i2, &mut i0); }
+        if raw_tri.points[2].y > raw_tri.points[1].y { mem::swap(&mut i2, &mut i1); }
 
-        tri
+        Triangle2D{
+            points: [
+                raw_tri.points[i2],
+                raw_tri.points[i1],
+                raw_tri.points[i0]
+            ]
+        }
     };
 
+    // We need to assert these equality conditions...
+    assert!(tri.points[2].y >= tri.points[1].y);
+    assert!(tri.points[1].y >= tri.points[0].y);
+
     let p012 = {
-        let mut tmp = interp_points(tri.points.0, tri.points.1);
+        let mut tmp = interp_points(tri.points[0], tri.points[1]);
         tmp.pop(); // This is because tmp[-1] == tmp_12[0]
-        let mut tmp_12 = interp_points(tri.points.1, tri.points.2);
+        let mut tmp_12 = interp_points(tri.points[1], tri.points[2]);
         tmp.append(&mut tmp_12);
         tmp
     };
 
-    let p02 = interp_points(tri.points.0, tri.points.2);
+    let p02 = interp_points(tri.points[0], tri.points[2]);
 
     assert_eq!(p012.len(), p02.len());
 
@@ -149,54 +176,68 @@ pub fn fill(raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
         mem::swap(&mut lefts, &mut rights);
     }
 
-    zip(lefts, rights).map(|p| raster::ScanlineH{l: p.0, r: p.1}).collect()
+    let tmp = zip(lefts, rights).map(|p| raster::ScanlineH{l: p.0, r: p.1}).collect();
+    tmp
 }
 
 pub fn fill_shader(raw_tri: &raster::Triangle2D, raw_shader: (f32, f32, f32)) -> Vec<(raster::ScanlineH, LinearIntensity)> {
     // --
     // Now let's sort the vertices/shader in ascending order
     let (tri, shader) = {
-        let mut tri = raw_tri.clone();
         let mut shader = raw_shader.clone();
 
-        let y0 = raw_tri.points.0.y;
-        let y1 = raw_tri.points.1.y;
-        let y2 = raw_tri.points.2.y;
+        let y0 = raw_tri.points[0].y;
+        let y1 = raw_tri.points[1].y;
+        let y2 = raw_tri.points[2].y;
+        let mut i0 = 0;
+        let mut i1 = 1;
+        let mut i2 = 2;
 
-        if y1 < y0 {
-            mem::swap(&mut tri.points.1, &mut tri.points.0);
+        if y1 > y0 {
+            mem::swap(&mut i1, &mut i0);
             mem::swap(&mut shader.1, &mut shader.0);
         }
-        if y2 < y0 {
-            mem::swap(&mut tri.points.2, &mut tri.points.0);
+        if y2 > y0 {
+            mem::swap(&mut i2, &mut i0);
             mem::swap(&mut shader.2, &mut shader.0);
         }
-        if y2 < y1 {
-            mem::swap(&mut tri.points.2, &mut tri.points.1);
+        if y2 > y1 {
+            mem::swap(&mut i2, &mut i1);
             mem::swap(&mut shader.2, &mut shader.1);
         }
+
+        let tri = Triangle2D{
+            points: [
+                raw_tri.points[i2],
+                raw_tri.points[i1],
+                raw_tri.points[i0]
+            ]
+        };
 
         (tri, shader)
     };
 
+    assert!(tri.points[2].y >= tri.points[1].y);
+    assert!(tri.points[1].y >= tri.points[0].y);
+
     let p012 = {
-        let mut tmp = interp_points(tri.points.0, tri.points.1);
+        let mut tmp = interp_points(tri.points[0], tri.points[1]);
         tmp.pop(); // This is because tmp[-1] == tmp_12[0]
-        let mut tmp_12 = interp_points(tri.points.1, tri.points.2);
+        let mut tmp_12 = interp_points(tri.points[1], tri.points[2]);
         tmp.append(&mut tmp_12);
         tmp
     };
 
     let h012 = {
-        let mut tmp = linspace_sample(tri.points.0.y, shader.0, tri.points.1.y, shader.1);
+        let mut tmp = linspace_sample(tri.points[0].y, shader.0, tri.points[1].y, shader.1);
         tmp.pop(); // This is because tmp[-1] == tmp_12[0]
-        let mut tmp_12 = linspace_sample(tri.points.1.y, shader.1, tri.points.2.y, shader.2);
+        let mut tmp_12 = linspace_sample(tri.points[1].y, shader.1, tri.points[2].y, shader.2);
         tmp.append(&mut tmp_12);
         tmp
     };
 
-    let p02 = interp_points(tri.points.0, tri.points.2);
-    let h02 = linspace_sample(tri.points.0.y, shader.0, tri.points.2.y, shader.2);
+    let p02 = interp_points(tri.points[0], tri.points[2]);
+    let h02 = linspace_sample(tri.points[0].y, shader.0, tri.points[2].y, shader.2);
 
     assert_eq!(p012.len(), p02.len());
     assert_eq!(h012.len(), h02.len());
@@ -252,7 +293,11 @@ pub fn render_triangle(
     tri: &raster::Triangle2D,
     col: Rgb<u8>
 ) {
+    render_pixel(img, tri.points[0], Rgb([255, 0, 0]));
+    render_pixel(img, tri.points[1], Rgb([255, 0, 0]));
+    render_pixel(img, tri.points[2], Rgb([255, 0, 0]));
     render_triangle_fill(img, tri, col);
+    // render_triangle_wireframe(img, tri, col);
 }
 
 // todo: see if we need to render the wireframe as well...
@@ -271,7 +316,7 @@ fn render_triangle_fill(
     col: Rgb<u8>
 ) {
     for line in fill(tri) {
-        for x in line.l.x..line.r.x {
+        for x in line.l.x..=line.r.x {
             render_pixel(img, raster::Pixel{x, y: line.l.y}, col)
         }
     }
@@ -301,9 +346,9 @@ pub fn render_triangle_wireframe(
     col: Rgb<u8>
 ) {
     [
-        line_between(tri.points.0, tri.points.1),
-        line_between(tri.points.1, tri.points.2),
-        line_between(tri.points.2, tri.points.0),
+        line_between(tri.points[0], tri.points[1]),
+        line_between(tri.points[1], tri.points[2]),
+        line_between(tri.points[2], tri.points[0]),
     ].map( |line| {
         line.iter().for_each(|point| render_pixel(img, *point, col));
     });
