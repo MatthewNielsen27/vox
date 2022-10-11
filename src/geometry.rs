@@ -22,6 +22,7 @@ impl Ray {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum IntersectionType {
     Incidental,
     Single,
@@ -36,7 +37,7 @@ impl Plane {
         top / bottom
     }
 
-    pub fn from(normal: Vector3<f32>, point: Vector3<f32>) -> Plane {
+    pub fn from(normal: &Vector3<f32>, point: &Vector3<f32>) -> Plane {
         let n = normal.normalize();
         let d = -1.0 * ((n.x * point.x) + (n.y * point.y) + (n.z * point.z));
         Plane { n, d }

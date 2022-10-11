@@ -1,4 +1,5 @@
 use std::path::Path;
+
 use vox::stl;
 
 #[test]

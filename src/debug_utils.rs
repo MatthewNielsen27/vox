@@ -52,6 +52,6 @@ impl Canvas {
 
     /// saves the Canvas to a file
     pub fn save(&self, path: &str) {
-        self.img.save(path);
+        self.img.save(path).unwrap();
     }
 }
