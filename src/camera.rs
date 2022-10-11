@@ -1,10 +1,6 @@
-use image::flat::View;
-
 extern crate nalgebra as na;
-use na::{Vector3, Vector2, Rotation3};
-use nalgebra::Point3;
 
-use crate::fwd::{raster, Vertex3D};
+use crate::fwd::{Vertex3D};
 
 // https://gabrielgambetta.com/computer-graphics-from-scratch/09-perspective-projection.html
 

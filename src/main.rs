@@ -4,8 +4,7 @@ use nalgebra::{Point3, Vector3};
 use vox::camera::Viewport;
 
 use vox::grr;
-use vox::fwd::{raster, Vertex3D};
-use vox::camera;
+use vox::fwd::{raster};
 
 use vox::stl::{mesh_from_stl};
 
@@ -29,9 +28,11 @@ fn main() {
         Rgb::from([r, g, b])
     };
 
+    // https://carmencincotti.com/2022-05-02/homogeneous-coordinates-clip-space-ndc/
+
     // Our camera looks toward the point (1.0, 0.0, 0.0).
     // It is located at (0.0, 0.0, 1.0).
-    let eye    = Point3::new(4.0, -1.5, -2.0);
+    let eye    = Point3::new(2.0, -1.0, 4.0);
     let target = Point3::new(0.0, 0.0, 0.0);
     let view   = nalgebra::Isometry3::look_at_rh(&eye, &target, &Vector3::y());
 
@@ -75,7 +76,7 @@ fn main() {
         //
         let tri = raster::Triangle2D{points: (p0, p1, p2)};
         //
-        grr::render_triangle(&mut img, &tri, random_col());
+        grr::render_triangle_wireframe(&mut img, &tri, random_col());
     }
 
     img.save("scene.png").unwrap();

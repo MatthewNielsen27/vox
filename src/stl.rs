@@ -4,7 +4,6 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io;
 use std::path::Path;
-use std::string::FromUtf8Error;
 
 use crate::fwd::{Vertex3D};
 use crate::model::{Mesh, VertexInfo, FaceInfo, VertexModel};
@@ -38,7 +37,7 @@ fn get_stl_encoding(path: &Path) -> Result<StlEncoding, String> {
 
     let parsed_header = {
         let mut bytes = [0; 5];
-        file.read_exact(&mut bytes);
+        file.read_exact(&mut bytes).expect("could not read 5 bytes from file header");
         String::from_utf8(Vec::from(bytes))
     };
 
@@ -84,7 +83,7 @@ fn facets_from_binary_stl(_path: &Path) -> Result<Vec<Facet>, String> {
 /// see: https://en.wikipedia.org/wiki/STL_(file_format)#ASCII_STL
 ///
 fn facets_from_ascii_stl(path: &Path) -> Result<Vec<Facet>, String> {
-    let mut file = File::open(&path).unwrap(); // todo: this could take an open File handle instead of a Path
+    let file = File::open(&path).unwrap(); // todo: this could take an open File handle instead of a Path
 
     let mut mode = ParseMode::ExpectingSolidStart;
 

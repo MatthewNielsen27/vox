@@ -6,4 +6,6 @@ pub mod model;
 mod scene;
 pub mod camera;
 pub mod stl;
+pub mod clipping;
+pub mod geometry;
 

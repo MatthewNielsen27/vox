@@ -3,17 +3,6 @@ use crate::fwd::{Vertex3D};
 
 use nalgebra as na;
 
-#[derive(Clone)]
-pub struct VertexInfo {
-    pub vtx: VertexModel,
-    pub faces: Vec<usize>
-}
-
-#[derive(Copy, Clone)]
-pub struct FaceInfo {
-    pub vertices: [usize; 3]
-}
-
 #[derive(Copy, Clone)]
 pub struct VertexModel(pub Vertex3D);
 
@@ -24,6 +13,17 @@ impl VertexModel {
     pub fn to_world(&self, transform: &na::Isometry3<f32>) -> VertexWorld {
         VertexWorld(transform.transform_point(&self.0))
     }
+}
+
+#[derive(Clone)]
+pub struct VertexInfo {
+    pub vtx: VertexModel,
+    pub faces: Vec<usize>
+}
+
+#[derive(Copy, Clone)]
+pub struct FaceInfo {
+    pub vertices: [usize; 3]
 }
 
 /// Defines a face-vertex mesh representation.
@@ -50,7 +50,7 @@ pub struct Model {
 
 impl Model {
     pub fn triangles(&self) -> impl Iterator<Item = (&VertexModel,&VertexModel,&VertexModel)> {
-        self.mesh.faces.iter().enumerate().map(|(i, face)| {
+        self.mesh.faces.iter().map(| face| {
             let v0 = &self.mesh.vertices[face.vertices[0]].vtx;
             let v1 = &self.mesh.vertices[face.vertices[1]].vtx;
             let v2 = &self.mesh.vertices[face.vertices[2]].vtx;
@@ -59,7 +59,7 @@ impl Model {
     }
 
     pub fn triangles_world(&self) -> impl Iterator<Item = (VertexWorld,VertexWorld,VertexWorld)> + '_ {
-        self.mesh.faces.iter().enumerate().map(|(i, face)| {
+        self.mesh.faces.iter().map(|face| {
             let v0 = &self.mesh.vertices[face.vertices[0]].vtx;
             let v1 = &self.mesh.vertices[face.vertices[1]].vtx;
             let v2 = &self.mesh.vertices[face.vertices[2]].vtx;
