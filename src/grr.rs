@@ -132,14 +132,13 @@ pub fn fill(raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
     // --
     // Now let's sort the vertices in ascending order
     let tri = {
-
         let mut i0 = 0;
         let mut i1 = 1;
         let mut i2 = 2;
 
-        if raw_tri.points[1].y > raw_tri.points[0].y { mem::swap(&mut i1, &mut i0); }
-        if raw_tri.points[2].y > raw_tri.points[0].y { mem::swap(&mut i2, &mut i0); }
-        if raw_tri.points[2].y > raw_tri.points[1].y { mem::swap(&mut i2, &mut i1); }
+        if raw_tri.points[i1].y > raw_tri.points[i0].y { mem::swap(&mut i1, &mut i0); }
+        if raw_tri.points[i2].y > raw_tri.points[i0].y { mem::swap(&mut i2, &mut i0); }
+        if raw_tri.points[i2].y > raw_tri.points[i1].y { mem::swap(&mut i2, &mut i1); }
 
         Triangle2D{
             points: [
