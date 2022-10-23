@@ -9,3 +9,5 @@ pub mod stl;
 pub mod clipping;
 pub mod geometry;
 pub mod debug_utils;
+pub mod surface;
+pub mod raster;

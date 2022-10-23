@@ -1,17 +1,19 @@
 use std::sync::Arc;
-use crate::fwd::{Vertex3D};
+use crate::fwd::{Vertex3};
 
 use nalgebra as na;
 
 #[derive(Copy, Clone)]
-pub struct VertexModel(pub Vertex3D);
+pub struct VertexModel(pub Vertex3);
 
 #[derive(Copy, Clone)]
-pub struct VertexWorld(pub Vertex3D);
+pub struct VertexWorld(pub Vertex3);
 
 impl VertexModel {
-    pub fn to_world(&self, transform: &na::Isometry3<f32>) -> VertexWorld {
-        VertexWorld(transform.transform_point(&self.0))
+    pub fn to_world(&self, world_from_model: &na::Isometry3<f32>) -> VertexWorld {
+        VertexWorld(
+            world_from_model.transform_point(&self.0)
+        )
     }
 }
 

@@ -3,7 +3,7 @@ use rand::Rng;
 use image::{ImageBuffer, RgbImage, Rgb};
 use nalgebra::Point3;
 
-use crate::fwd::raster;
+use crate::raster;
 use crate::geometry::Triangle;
 use crate::grr;
 
@@ -38,7 +38,7 @@ impl Canvas {
                 self.to_pixel(&tri.0[2])
             ]
         };
-        grr::render_triangle(&mut self.img, &tri_2d, *c);
+        // grr::render_triangle(&mut self.img, &tri_2d, *c);
     }
 
     fn to_pixel(&self, p: &Point3<f32>) -> raster::Pixel {

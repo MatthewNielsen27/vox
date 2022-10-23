@@ -1,4 +1,5 @@
 use nalgebra::{Vector3, Point3};
+extern crate nalgebra as na;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub struct Triangle<PointType>(pub [PointType; 3]);

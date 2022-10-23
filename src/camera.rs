@@ -1,6 +1,6 @@
 extern crate nalgebra as na;
 
-use crate::fwd::{Vertex3D};
+use crate::fwd::{Vertex3};
 
 // https://gabrielgambetta.com/computer-graphics-from-scratch/09-perspective-projection.html
 
@@ -14,8 +14,8 @@ pub struct Viewport {
 
 impl Viewport {
     // https://en.wikipedia.org/wiki/Graphics_pipeline#Window-Viewport_transformation
-    pub fn transform_point(&self, p: &Vertex3D) -> Vertex3D {
-        Vertex3D::from(
+    pub fn transform_point(&self, p: &Vertex3) -> Vertex3 {
+        Vertex3::from(
             [
                 self.upper_left.0 as f32 + (((1.0 + p.x) * self.size.0 as f32) / 2.0),
                 self.upper_left.1 as f32 + (((1.0 + p.y) * self.size.1 as f32) / 2.0),

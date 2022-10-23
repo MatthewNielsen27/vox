@@ -1,7 +1,13 @@
 use std::iter::{zip};
-use image::{Pixel, Rgb};
 
-use crate::fwd::{raster, LinearIntensity};
+use std::mem;
+use nalgebra::Point3;
+
+use crate::geometry;
+use crate::fwd::{Vertex3Ndc, Vertex3};
+use crate::raster;
+use crate::raster::linspace_sample;
+use crate::surface::Surface;
 
 pub fn line_between(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     return if (p2.y - p1.y).abs() < (p2.x - p1.x).abs() {
@@ -75,58 +81,6 @@ fn plh(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     points
 }
 
-use std::mem;
-use crate::fwd::raster::Triangle2D;
-
-pub fn interp_points(p0: raster::Pixel, p1: raster::Pixel) -> Vec<raster::Pixel> {
-    linspace_sample(p0.y, p0.x as f32, p1.y, p1.x as f32)
-        .iter()
-        .map(|(y,x)| raster::Pixel{x: *x as i32, y: *y})
-        .collect()
-}
-
-/// linspace sampling between the 2 points
-pub fn linspace_sample(
-    mut x0: i32, mut y0: f32,
-    mut x1: i32, mut y1: f32
-)
-    -> Vec<(i32, f32)>
-{
-    if x1 == x0 {
-        // While we could return either value in this case, we should return the first value because
-        // it works better for us.
-        //
-        // For example: We would get discontinuity when sampling the line segments AC and ABC of a
-        //              triangle.
-        //
-        //                                      a
-        //                                      |\
-        //                                      | \
-        //                                      |  \
-        //                                    b |___\ c
-        //
-        //        why?  Say that ABC is on the left of AC and the line BC is horizontal. If we
-        //              returned p1 instead of p0, then the last sample would jump across the
-        //              triangle to vertex C. Since the line AC ends on C, then we'd be missing
-        //              the last scanline of the triangle because the 2 points are the same.
-        //
-        return Vec::from([(x0, y0)]);
-    }
-
-    // reorder if need be
-    if x1 < x0 {
-        mem::swap(&mut x1, &mut x0);
-        mem::swap(&mut y1, &mut y0);
-    }
-
-    let m = (y1 - y0) / (x1 - x0) as f32;
-    let b = y0 - (m * x0 as f32);
-
-    (x0..=x1).map(|x| {
-        (x, ((m * x as f32) + b))
-    }).collect()
-}
-
 /// Fill a triangle
 pub fn fill(raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
     // --
@@ -140,7 +94,7 @@ pub fn fill(raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
         if raw_tri.points[i2].y > raw_tri.points[i0].y { mem::swap(&mut i2, &mut i0); }
         if raw_tri.points[i2].y > raw_tri.points[i1].y { mem::swap(&mut i2, &mut i1); }
 
-        Triangle2D{
+        raster::Triangle2D{
             points: [
                 raw_tri.points[i2],
                 raw_tri.points[i1],
@@ -154,14 +108,14 @@ pub fn fill(raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
     assert!(tri.points[1].y >= tri.points[0].y);
 
     let p012 = {
-        let mut tmp = interp_points(tri.points[0], tri.points[1]);
+        let mut tmp = raster::interp_pixels(tri.points[0], tri.points[1]);
         tmp.pop(); // This is because tmp[-1] == tmp_12[0]
-        let mut tmp_12 = interp_points(tri.points[1], tri.points[2]);
+        let mut tmp_12 = raster::interp_pixels(tri.points[1], tri.points[2]);
         tmp.append(&mut tmp_12);
         tmp
     };
 
-    let p02 = interp_points(tri.points[0], tri.points[2]);
+    let p02 = raster::interp_pixels(tri.points[0], tri.points[2]);
 
     assert_eq!(p012.len(), p02.len());
 
@@ -179,176 +133,179 @@ pub fn fill(raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
     tmp
 }
 
-pub fn fill_shader(raw_tri: &raster::Triangle2D, raw_shader: (f32, f32, f32)) -> Vec<(raster::ScanlineH, LinearIntensity)> {
-    // --
-    // Now let's sort the vertices/shader in ascending order
-    let (tri, shader) = {
-        let mut shader = raw_shader.clone();
-
-        let y0 = raw_tri.points[0].y;
-        let y1 = raw_tri.points[1].y;
-        let y2 = raw_tri.points[2].y;
-        let mut i0 = 0;
-        let mut i1 = 1;
-        let mut i2 = 2;
-
-        if y1 > y0 {
-            mem::swap(&mut i1, &mut i0);
-            mem::swap(&mut shader.1, &mut shader.0);
-        }
-        if y2 > y0 {
-            mem::swap(&mut i2, &mut i0);
-            mem::swap(&mut shader.2, &mut shader.0);
-        }
-        if y2 > y1 {
-            mem::swap(&mut i2, &mut i1);
-            mem::swap(&mut shader.2, &mut shader.1);
-        }
-
-        let tri = Triangle2D{
+/// [returns] triangle scanlines.
+pub fn scanlines(&raw_tri: &raster::Triangle2D) -> Vec<raster::ScanlineH> {
+    let tri = {
+        let is = raw_tri.get_indices_sorted();
+        raster::Triangle2D {
             points: [
-                raw_tri.points[i2],
-                raw_tri.points[i1],
-                raw_tri.points[i0]
+                raw_tri.points[is.2],
+                raw_tri.points[is.1],
+                raw_tri.points[is.0]
             ]
-        };
-
-        (tri, shader)
+        }
     };
 
-    assert!(tri.points[2].y >= tri.points[1].y);
-    assert!(tri.points[1].y >= tri.points[0].y);
+    let (l, r) = tri.get_sides();
+    zip(l, r).map(|points| raster::ScanlineH{l: points.0, r: points.1}).collect()
+}
 
-    let p012 = {
-        let mut tmp = interp_points(tri.points[0], tri.points[1]);
-        tmp.pop(); // This is because tmp[-1] == tmp_12[0]
-        let mut tmp_12 = interp_points(tri.points[1], tri.points[2]);
-        tmp.append(&mut tmp_12);
-        tmp
-    };
-
-    let h012 = {
-        let mut tmp = linspace_sample(tri.points[0].y, shader.0, tri.points[1].y, shader.1);
-        tmp.pop(); // This is because tmp[-1] == tmp_12[0]
-        let mut tmp_12 = linspace_sample(tri.points[1].y, shader.1, tri.points[2].y, shader.2);
-        tmp.append(&mut tmp_12);
-        tmp
-    };
-
-    let p02 = interp_points(tri.points[0], tri.points[2]);
-    let h02 = linspace_sample(tri.points[0].y, shader.0, tri.points[2].y, shader.2);
-
-    assert_eq!(p012.len(), p02.len());
-    assert_eq!(h012.len(), h02.len());
-
+/// [returns] triangle scanlines with attributes interpolated at the endpoints.
+pub fn scanlines_with_attributes(&raw_tri: &raster::Triangle2D, raw_attr: &[f32; 3]) -> Vec<(raster::ScanlineH, (f32, f32))> {
     // --
-    // Now we need to determine the left and right sets of points
-    let mut lefts = p012;
-    let mut rights = p02;
+    // Step 1: preprocess the input by sorting it by Y value of `raw_tri`.
+    let (tri, attr) = {
+        let is = raw_tri.get_indices_sorted();
+        (
+            raster::Triangle2D {
+                points: [
+                    raw_tri.points[is.2],
+                    raw_tri.points[is.1],
+                    raw_tri.points[is.0]
+                ]
+            },
+            [raw_attr[is.2], raw_attr[is.1], raw_attr[is.0]]
+        )
+    };
 
-    let mut lefts_h = h012;
-    let mut rights_h = h02;
-
-    let mid = rights.len() / 2;
-    if rights[mid].x < lefts[mid].x {
-        mem::swap(&mut lefts, &mut rights);
-        mem::swap(&mut lefts_h, &mut rights_h);
-    }
+    let (sides, attributes) = tri.get_sides_with_attr(&(attr[0], attr[1], attr[2]));
 
     // --
     // Now we need to zip these things together!
     zip(
-        zip(lefts, rights),
-        zip(lefts_h, rights_h)
+        zip(sides.0, sides.1),
+        zip(attributes.0, attributes.1)
     ).map(|(points, intensities)| {
         (
             raster::ScanlineH{l: points.0, r: points.1},
-            LinearIntensity{l: intensities.0.1, r: intensities.1.1}
+            intensities
         )
     }).collect()
 }
 
-// render pixel to image
-pub fn render_pixel(img: &mut image::RgbImage, v: raster::Pixel, c: Rgb<u8>) {
-    if (v.x < 0 || v.x >= img.width() as i32) || (v.y < 0 || v.y >= img.height() as i32) {
-        return;
-    }
+// pub fn render_line(img: &mut image::RgbImage, p1: raster::Pixel, p2: raster::Pixel) {
+//     for p in line_between(p1, p2) {
+//         render_pixel(img, p, Rgb([0, 255, 0]));
+//     }
+//
+//     render_pixel(img, p1, Rgb([255, 0, 0]));
+//     render_pixel(img, p2, Rgb([255, 0, 0]));
+// }
 
-    img.put_pixel(v.x as u32, v.y as u32, c);
-}
-
-pub fn render_line(img: &mut image::RgbImage, p1: raster::Pixel, p2: raster::Pixel) {
-    for p in line_between(p1, p2) {
-        render_pixel(img, p, Rgb([0, 255, 0]));
-    }
-
-    // todo: see if we need these...
-    render_pixel(img, p1, Rgb([255, 0, 0]));
-    render_pixel(img, p2, Rgb([255, 0, 0]));
-}
-
-pub fn render_triangle(
-    img: &mut image::RgbImage,
-    tri: &raster::Triangle2D,
-    col: Rgb<u8>
-) {
-    render_pixel(img, tri.points[0], Rgb([255, 0, 0]));
-    render_pixel(img, tri.points[1], Rgb([255, 0, 0]));
-    render_pixel(img, tri.points[2], Rgb([255, 0, 0]));
-    render_triangle_fill(img, tri, col);
-    // render_triangle_wireframe(img, tri, col);
-}
+// pub fn render_triangle(
+//     img: &mut image::RgbImage,
+//     tri: &raster::Triangle2D,
+//     col: Rgb<u8>
+// ) {
+//     render_pixel(img, tri.points[0], Rgb([255, 0, 0]));
+//     render_pixel(img, tri.points[1], Rgb([255, 0, 0]));
+//     render_pixel(img, tri.points[2], Rgb([255, 0, 0]));
+//     render_triangle_fill(img, tri, col);
+//     // render_triangle_wireframe(img, tri, col);
+// }
 
 // todo: see if we need to render the wireframe as well...
-pub fn render_triangle_shader(
-    img: &mut image::RgbImage,
-    tri: &raster::Triangle2D,
-    col: Rgb<u8>,
-    shader: (f32, f32, f32)
-) {
-    render_triangle_fill_shader(img, tri, col, shader);
-}
+// pub fn render_triangle_shader(
+//     img: &mut image::RgbImage,
+//     tri: &raster::raster::Triangle2D,
+//     col: Rgb<u8>,
+//     shader: (f32, f32, f32)
+// ) {
+//     render_triangle_fill_shader(img, tri, col, shader);
+// }
 
-fn render_triangle_fill(
-    img: &mut image::RgbImage,
-    tri: &raster::Triangle2D,
-    col: Rgb<u8>
-) {
-    for line in fill(tri) {
-        for x in line.l.x..=line.r.x {
-            render_pixel(img, raster::Pixel{x, y: line.l.y}, col)
-        }
-    }
-}
+// fn render_triangle_fill(
+//     img: &mut image::RgbImage,
+//     tri: &raster::raster::Triangle2D,
+//     col: Rgb<u8>
+// ) {
+//     for line in fill(tri) {
+//         for x in line.l.x..=line.r.x {
+//             render_pixel(img, raster::Pixel{x, y: line.l.y}, col)
+//         }
+//     }
+// }
 
-fn render_triangle_fill_shader(
-    img: &mut image::RgbImage,
-    tri: &raster::Triangle2D,
-    col: Rgb<u8>,
-    shader: (f32, f32, f32)
-) {
-    for (line, intensity) in fill_shader(tri, shader) {
-        for (x, h) in linspace_sample(line.l.x, intensity.l as f32, line.r.x, intensity.r as f32) {
-
-            // Come up with a new color
-            let mut c = col.clone();
-            c.apply(|chan| (chan as f32 * h) as u8);
-
-            render_pixel(img, raster::Pixel{x, y: line.l.y}, c);
-        }
-    }
-}
+// fn render_triangle_fill_shader(
+//     img: &mut image::RgbImage,
+//     tri: &raster::raster::Triangle2D,
+//     col: Rgb<u8>,
+//     shader: (f32, f32, f32)
+// ) {
+//     for (line, intensity) in fill_shader(tri, shader) {
+//         for (x, h) in raster::linspace_sample(line.l.x, intensity.l as f32, line.r.x, intensity.r as f32) {
+//
+//             // Come up with a new color
+//             let mut c = col.clone();
+//             c.apply(|chan| (chan as f32 * h) as u8);
+//
+//             render_pixel(img, raster::Pixel{x, y: line.l.y}, c);
+//         }
+//     }
+// }
 
 pub fn render_triangle_wireframe(
-    img: &mut image::RgbImage,
+    surface: &mut Surface,
     tri: &raster::Triangle2D,
-    col: Rgb<u8>
+    col: &[u8; 3]
 ) {
     [
         line_between(tri.points[0], tri.points[1]),
         line_between(tri.points[1], tri.points[2]),
         line_between(tri.points[2], tri.points[0]),
     ].map( |line| {
-        line.iter().for_each(|point| render_pixel(img, *point, col));
+        line.iter().for_each(|point| surface.set_pixel(point.x as usize, point.y as usize, col));
     });
+}
+
+pub fn render_tri_wireframe(
+    surface: &mut Surface,
+    tri: &geometry::Triangle<Vertex3Ndc>,
+    col: &[u8; 3]
+) {
+    let (p0, z0) = surface.to_pixel(&tri.0[0]);
+    let (p1, z1) = surface.to_pixel(&tri.0[1]);
+    let (p2, z2) = surface.to_pixel(&tri.0[2]);
+}
+
+pub fn render_tri(
+    surface: &mut Surface,
+    tri: &geometry::Triangle<Vertex3Ndc>,
+    col: &[u8; 3]
+) {
+    // Step 1: Convert the triangle into a 2D triangle with z-attributes
+    let (p0, z0) = surface.to_pixel(&tri.0[0]);
+    let (p1, z1) = surface.to_pixel(&tri.0[1]);
+    let (p2, z2) = surface.to_pixel(&tri.0[2]);
+
+    scanlines_with_attributes(
+        &raster::Triangle2D { points: [p0, p1, p2] },
+        &[z0, z1, z2]
+    ).iter().for_each(|&(line, z_range)| {
+        let y = line.l.y as usize;
+
+        for (x, z) in linspace_sample(line.l.x, z_range.0, line.r.x, z_range.1) {
+            let x = x as usize;
+            let z = 1.0 / z;
+
+            let z_current = surface.get_z(x, y);
+            if z > z_current {
+                surface.set_pixel(x, y, col);
+                surface.set_z(x, y, z);
+            }
+        }
+    });
+}
+
+/// [returns]   True if the triangle (in view space) is back-facing.
+///
+/// [note]      This is known as back-face-culling. For more information.
+pub fn is_back_facing(tri: &[Vertex3; 3], camera: &Point3<f32>) -> bool {
+    let d1 = tri[1] - tri[0];
+    let d2 = tri[2] - tri[0];
+    let normal = d1.cross(&d2).xyz();
+
+    let ray_from_camera = camera - tri[0];
+
+    normal.dot(&ray_from_camera) <= 0.0
 }

@@ -5,7 +5,7 @@ use std::io::prelude::*;
 use std::io;
 use std::path::Path;
 
-use crate::fwd::{Vertex3D};
+use crate::fwd::{Vertex3};
 use crate::model::{Mesh, VertexInfo, FaceInfo, VertexModel};
 
 pub fn mesh_from_stl(path: &Path) -> Result<Mesh, String> {
@@ -14,7 +14,7 @@ pub fn mesh_from_stl(path: &Path) -> Result<Mesh, String> {
 
 #[derive(Default, Copy, Clone)]
 pub struct Facet {
-    pub data: [Vertex3D; 3]
+    pub data: [Vertex3; 3]
 }
 
 fn facets_from_stl(path: &Path) -> Result<Vec<Facet>, String> {
@@ -150,7 +150,7 @@ fn facets_from_ascii_stl(path: &Path) -> Result<Vec<Facet>, String> {
                     return Err(format!("[{}] expected vertex, got {}", i, raw));
                 }
 
-                current_facet.data[current_vertex_i] = Vertex3D::from(
+                current_facet.data[current_vertex_i] = Vertex3::from(
                     [
                         parts[1].parse().unwrap(),
                         parts[2].parse().unwrap(),
@@ -172,7 +172,7 @@ fn facets_from_ascii_stl(path: &Path) -> Result<Vec<Facet>, String> {
     Ok(facets)
 }
 
-fn to_hashable(v: Vertex3D) -> (OrderedFloat<f32>, OrderedFloat<f32>, OrderedFloat<f32>) {
+fn to_hashable(v: Vertex3) -> (OrderedFloat<f32>, OrderedFloat<f32>, OrderedFloat<f32>) {
     (OrderedFloat::from(v.x), OrderedFloat::from(v.y), OrderedFloat::from(v.z))
 }
 

@@ -1,25 +1,20 @@
 use std::path::Path;
-use image::{ImageBuffer, RgbImage, Rgb};
+use image::{Rgb};
 use nalgebra::{Point3, Vector3};
-use vox::camera::Viewport;
 
 use vox::grr;
-use vox::fwd::{raster};
+use vox::geometry;
 
 use vox::stl::{mesh_from_stl};
 
 use rand::Rng;
+use vox::fwd::Vertex3Ndc;
+use vox::surface::Surface;
 
 fn main() {
-    let mut img: RgbImage = ImageBuffer::new(1600, 900);
+    let mut surface = Surface::new(1600, 900);
 
     let mut rng = rand::thread_rng();
-
-    let viewport = Viewport{
-        z_minmax: (0.0, 1.0),
-        size: (1600, 900),
-        upper_left: (0, 0)
-    };
 
     let mut random_col = || -> Rgb<u8> {
         let r: u8 = rng.gen();
@@ -32,14 +27,15 @@ fn main() {
 
     // Our camera looks toward the point (1.0, 0.0, 0.0).
     // It is located at (0.0, 0.0, 1.0).
-    let eye    = Point3::new(2.0, -1.0, 4.0);
+    let eye    = Point3::new(1.5, 1.5, 4.0);
     let target = Point3::new(0.0, 0.0, 0.0);
     let view   = nalgebra::Isometry3::look_at_rh(&eye, &target, &Vector3::y());
 
     // A perspective projection.
-    let projection = nalgebra::Perspective3::new(16.0 / 9.0, 3.14 / 2.0, 1.0, 1000.0);
+    let projection = nalgebra::Perspective3::new(16.0 / 9.0, 3.14 / 2.0, 0.1, 100.0);
 
-    let mesh = mesh_from_stl(Path::new("resources/cube_ascii.stl")).unwrap();
+    let mesh = mesh_from_stl(Path::new("/Users/matthewnielsen/Documents/sphere-ascii.stl")).unwrap();
+    // let mesh = mesh_from_stl(Path::new("resources/cube_ascii.stl")).unwrap();
 
     let world_from_model = nalgebra::Isometry3::translation(0.0, 0.0, 0.0);
 
@@ -56,28 +52,27 @@ fn main() {
 
     for face in &mesh.faces {
         // This transforms the coordinate into NDC space (normalized-device-coordinate space)
+        let p0_view = mat_model_view.transform_point(&mesh.get_vertex(face.vertices[0]).0);
+        let p1_view = mat_model_view.transform_point(&mesh.get_vertex(face.vertices[1]).0);
+        let p2_view = mat_model_view.transform_point(&mesh.get_vertex(face.vertices[2]).0);
+
+        // This is back-face culling
+        if grr::is_back_facing(&[p0_view, p1_view, p2_view], &eye) {
+           continue
+        }
+
+        // Step 1: clip triangles in view
+        // Step 2: discard back-facing triangles
+        // Step 3:
+
         let p0 = model_view_projection.transform_point(&mesh.get_vertex(face.vertices[0]).0);
         let p1 = model_view_projection.transform_point(&mesh.get_vertex(face.vertices[1]).0);
         let p2 = model_view_projection.transform_point(&mesh.get_vertex(face.vertices[2]).0);
 
-        println!("{}", p0);
-        println!("{}", p1);
-        println!("{}", p2);
+        let tri = geometry::Triangle([Vertex3Ndc(p0), Vertex3Ndc(p1), Vertex3Ndc(p2)]);
 
-        let p0 = viewport.transform_point(&p0);
-        let p1 = viewport.transform_point(&p1);
-        let p2 = viewport.transform_point(&p2);
-
-        let p0 = raster::Pixel{x: p0.x as i32, y: p0.y as i32};
-        let p1 = raster::Pixel{x: p1.x as i32, y: p1.y as i32};
-        let p2 = raster::Pixel{x: p2.x as i32, y: p2.y as i32};
-        // println!("triangle: <{},{}> <{},{}> <{},{}>", p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
-
-        //
-        let tri = raster::Triangle2D{points: [p0, p1, p2]};
-        //
-        grr::render_triangle_wireframe(&mut img, &tri, random_col());
+        grr::render_tri(&mut surface, &tri, &random_col().0);
     }
 
-    img.save("scene.png").unwrap();
+    surface.to_img().save("foo.png").unwrap();
 }
