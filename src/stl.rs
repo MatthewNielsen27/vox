@@ -58,18 +58,6 @@ fn get_stl_encoding(path: &Path) -> Result<StlEncoding, String> {
     }
 }
 
-/// Defines the states of an STL parser.
-///
-enum ParseMode {
-    ExpectingSolidStart,
-    ExpectingStartOfFacetOrEndOfSolid,
-    ExpectingFacetEnd,
-    ExpectingLoopStart,
-    ExpectingLoopEnd,
-    ExpectingVertex,
-    Done
-}
-
 /// A simple parser for binary STL files.
 ///
 /// see: https://en.wikipedia.org/wiki/STL_(file_format)#Binary_STL

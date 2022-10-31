@@ -1,13 +1,20 @@
 use std::iter::{zip};
 
 use std::mem;
-use nalgebra::Point3;
+use image::Rgb;
 
+use nalgebra as na;
+use nalgebra::Point3;
+use nalgebra_glm::pi;
+
+use crate::debug_utils::random_col;
 use crate::geometry;
 use crate::fwd::{Vertex3Ndc, Vertex3};
+use crate::model::Model;
 use crate::raster;
 use crate::raster::linspace_sample;
 use crate::surface::Surface;
+use crate::camera::CameraInfo;
 
 pub fn line_between(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     return if (p2.y - p1.y).abs() < (p2.x - p1.x).abs() {
@@ -300,12 +307,60 @@ pub fn render_tri(
 /// [returns]   True if the triangle (in view space) is back-facing.
 ///
 /// [note]      This is known as back-face-culling. For more information.
-pub fn is_back_facing(tri: &[Vertex3; 3], camera: &Point3<f32>) -> bool {
+pub fn is_back_facing(tri: &[Vertex3; 3], eye: &na::Point3<f32>) -> bool {
     let d1 = tri[1] - tri[0];
     let d2 = tri[2] - tri[0];
     let normal = d1.cross(&d2).xyz();
+    normal.dot(&(eye - tri[0])) <= 0.0
+}
 
-    let ray_from_camera = camera - tri[0];
+pub fn render_model(
+    model: &Model,
+    camera: &CameraInfo,
+    proj: &na::Perspective3<f32>,
+    surface: &mut Surface,
+    col: &[u8; 3]
+) {
+    let view = camera.get_view_matrix();
 
-    normal.dot(&ray_from_camera) <= 0.0
+    let proj = proj.to_homogeneous();
+
+    let light = Point3::from([0.0, -100.0, 50.0]);
+
+    // todo: decide on the right time to operate upon indices
+    for tri in model.triangles_world() {
+        let p0_view = view.transform_point(&tri.0.0);
+        let p1_view = view.transform_point(&tri.1.0);
+        let p2_view = view.transform_point(&tri.2.0);
+
+        // This is known as back-face culling
+        // if is_back_facing(&[p0_view, p1_view, p2_view], &camera.eye) {
+        //     continue
+        // }
+
+        // todo: this will be replaced by a fragment shader
+        let d1 = p1_view - p0_view;
+        let d2 = p2_view - p0_view;
+        let normal = d1.cross(&d2).xyz().normalize();
+
+        let light_ray = (p0_view - light).normalize();
+
+        let theta = (normal.dot(&light_ray) / (normal.norm() * light_ray.norm())).acos();
+        let theta_mult = (theta / pi::<f32>());
+
+        let col = [
+            (col[0] as f32 * theta_mult) as u8,
+            (col[1] as f32 * theta_mult) as u8,
+            (col[2] as f32 * theta_mult) as u8
+        ];
+
+        // Step 2: clip triangles that are outside the frame.
+
+        // Step 3: convert the triangle into NDC space.
+        let p0 = Vertex3Ndc(proj.transform_point(&p0_view));
+        let p1 = Vertex3Ndc(proj.transform_point(&p1_view));
+        let p2 = Vertex3Ndc(proj.transform_point(&p2_view));
+
+        render_tri(surface, &geometry::Triangle([p0, p1, p2]), &col);
+    }
 }
