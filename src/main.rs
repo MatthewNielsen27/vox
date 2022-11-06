@@ -9,14 +9,14 @@ use vox::model::Mesh;
 use vox::surface::Surface;
 
 fn main() {
-    let mut surface = Surface::new(400, 300);
+    let mut surface = Surface::new(1920, 1080);
 
     let camera = CameraInfo {
-        eye:    na::Point3::new(0.0, 0.0, 4.0),
+        eye:    na::Point3::new(0.0, 0.0, 3.0),
         target: na::Point3::new(0.0, 0.0, 0.0)
     };
 
-    let proj  = nalgebra::Perspective3::new(4.0 / 3.0, 3.14 / 2.0, 1.0, 100.0);
+    let proj  = nalgebra::Perspective3::new(1920.0 / 1080.0, 3.14 / 2.0, 1.0, 100.0);
 
     // Let's create a model in the given scene.
     let model_path = Path::new("/Users/matthewnielsen/Documents/sphere-ascii.stl");
