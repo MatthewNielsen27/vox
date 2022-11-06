@@ -1,7 +1,6 @@
 use std::mem;
 use nalgebra::{Point3};
 
-use crate::clipping::ClippedTriangle::{DoubleReplacement, NoClip, SingleReplacement};
 use crate::geometry::{IntersectionType, Plane, Ray, Triangle};
 
 pub struct BoundingSphere {
@@ -67,7 +66,7 @@ pub fn clip_triangle(
     let state = points.iter().filter(|x| **x >= 0.0).count();
     if state == 3 {
         // We have 3 point(s) above the plane
-        Some((NoClip, None))
+        Some((ClippedTriangle::NoClip, None))
     } else if state == 0 {
         // We have 3 point(s) below the plane
         None
@@ -129,10 +128,10 @@ pub fn clip_triangle(
         let new_triangle_2 = TriangleWith2Replaced {
             tri: new_triangle_2,
             replacement_a: (i_1, (i_1, i_2)), // 'B' gets replaced with the intersection of `BC`
-            replacement_b: (i_2, (i_0, i_2))  // 'B' gets replaced with the intersection of `BC`
+            replacement_b: (i_2, (i_0, i_2))  // 'C' gets replaced with the intersection of `AC`
         };
 
-        Some((SingleReplacement(new_triangle_1), Some(DoubleReplacement(new_triangle_2))))
+        Some((ClippedTriangle::SingleReplacement(new_triangle_1), Some(ClippedTriangle::DoubleReplacement(new_triangle_2))))
 
     } else {
         // --
@@ -178,7 +177,7 @@ pub fn clip_triangle(
             replacement_b: (i_c, (i_a, i_c))
         };
 
-        Some((DoubleReplacement(result), None))
+        Some((ClippedTriangle::DoubleReplacement(result), None))
     }
 }
 

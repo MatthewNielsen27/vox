@@ -1,14 +1,17 @@
 use std::path::Path;
 use nalgebra::{Point3, Vector3};
 
-use vox::stl;
+use vox_stl::stl;
 use vox::clipping;
 use vox::geometry::{Plane, Triangle};
+use vox::model::Mesh;
 
 #[test]
 fn test_clipping_bounding_sphere() {
     // todo: We need a UnitSolids type thing
-    let mesh = stl::mesh_from_stl(Path::new("resources/cube_ascii.stl")).unwrap();
+    let mesh = Mesh::from_facets(
+        stl::parse_from_file(Path::new("resources/cube_ascii.stl")).unwrap()
+    );
     assert_eq!(mesh.faces.len(), 12);
     assert_eq!(mesh.vertices.len(), 8);
 

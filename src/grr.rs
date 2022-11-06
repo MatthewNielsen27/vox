@@ -1,13 +1,11 @@
 use std::iter::{zip};
 
 use std::mem;
-use image::Rgb;
 
 use nalgebra as na;
 use nalgebra::Point3;
 use nalgebra_glm::pi;
 
-use crate::debug_utils::random_col;
 use crate::geometry;
 use crate::fwd::{Vertex3Ndc, Vertex3};
 use crate::model::Model;
@@ -251,29 +249,29 @@ pub fn scanlines_with_attributes(&raw_tri: &raster::Triangle2D, raw_attr: &[f32;
 //     }
 // }
 
-pub fn render_triangle_wireframe(
-    surface: &mut Surface,
-    tri: &raster::Triangle2D,
-    col: &[u8; 3]
-) {
-    [
-        line_between(tri.points[0], tri.points[1]),
-        line_between(tri.points[1], tri.points[2]),
-        line_between(tri.points[2], tri.points[0]),
-    ].map( |line| {
-        line.iter().for_each(|point| surface.set_pixel(point.x as usize, point.y as usize, col));
-    });
-}
+// pub fn render_triangle_wireframe(
+//     surface: &mut Surface,
+//     tri: &raster::Triangle2D,
+//     col: &[u8; 3]
+// ) {
+//     [
+//         line_between(tri.points[0], tri.points[1]),
+//         line_between(tri.points[1], tri.points[2]),
+//         line_between(tri.points[2], tri.points[0]),
+//     ].map( |line| {
+//         line.iter().for_each(|point| surface.set_pixel(point.x as usize, point.y as usize, col));
+//     });
+// }
 
-pub fn render_tri_wireframe(
-    surface: &mut Surface,
-    tri: &geometry::Triangle<Vertex3Ndc>,
-    col: &[u8; 3]
-) {
-    let (p0, z0) = surface.to_pixel(&tri.0[0]);
-    let (p1, z1) = surface.to_pixel(&tri.0[1]);
-    let (p2, z2) = surface.to_pixel(&tri.0[2]);
-}
+// pub fn render_tri_wireframe(
+//     surface: &mut Surface,
+//     tri: &geometry::Triangle<Vertex3Ndc>,
+//     col: &[u8; 3]
+// ) {
+//     let (p0, z0) = surface.to_pixel(&tri.0[0]);
+//     let (p1, z1) = surface.to_pixel(&tri.0[1]);
+//     let (p2, z2) = surface.to_pixel(&tri.0[2]);
+// }
 
 pub fn render_tri(
     surface: &mut Surface,
@@ -307,11 +305,11 @@ pub fn render_tri(
 /// [returns]   True if the triangle (in view space) is back-facing.
 ///
 /// [note]      This is known as back-face-culling. For more information.
-pub fn is_back_facing(tri: &[Vertex3; 3], eye: &na::Point3<f32>) -> bool {
+pub fn is_back_facing(tri: &[Vertex3; 3], eye_ray: &na::Vector3<f32>) -> bool {
     let d1 = tri[1] - tri[0];
     let d2 = tri[2] - tri[0];
     let normal = d1.cross(&d2).xyz();
-    normal.dot(&(eye - tri[0])) <= 0.0
+    normal.dot(&(eye_ray - tri[0].coords)) <= 0.0
 }
 
 pub fn render_model(
@@ -334,9 +332,9 @@ pub fn render_model(
         let p2_view = view.transform_point(&tri.2.0);
 
         // This is known as back-face culling
-        // if is_back_facing(&[p0_view, p1_view, p2_view], &camera.eye) {
-        //     continue
-        // }
+        if is_back_facing(&[p0_view, p1_view, p2_view], &(camera.eye - camera.target)) {
+            continue
+        }
 
         // todo: this will be replaced by a fragment shader
         let d1 = p1_view - p0_view;
@@ -346,7 +344,7 @@ pub fn render_model(
         let light_ray = (p0_view - light).normalize();
 
         let theta = (normal.dot(&light_ray) / (normal.norm() * light_ray.norm())).acos();
-        let theta_mult = (theta / pi::<f32>());
+        let theta_mult = theta / pi::<f32>();
 
         let col = [
             (col[0] as f32 * theta_mult) as u8,

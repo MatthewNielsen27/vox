@@ -11,3 +11,5 @@ nalgebra = "0.31.1"
 nalgebra-glm = "0.17.0"
 rand = "0.8.5"
 ordered-float = "3.1.0"
+
+vox-stl = { "path"="vox-stl" }

@@ -1,6 +1,4 @@
-use std::iter::zip;
 use image::{ImageBuffer, RgbImage, Rgb};
-use ordered_float::Float;
 
 use crate::fwd::Vertex3Ndc;
 use crate::raster::Pixel;

@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::Arc;
 use crate::fwd::{Vertex3};
 
@@ -68,5 +67,47 @@ impl Model {
             let v2 = &self.mesh.vertices[face.vertices[2]].vtx;
             (v0.to_world(&self.transform), v1.to_world(&self.transform), v2.to_world(&self.transform))
         })
+    }
+}
+
+use vox_stl::fwd::{Facet, Vertex};
+use std::collections::HashMap;
+use ordered_float::OrderedFloat;
+
+impl Mesh {
+    pub fn from_facets(facets: Vec<Facet>) -> Self {
+        let mut vertices : Vec<VertexInfo> = vec![];
+        let mut vert_lookup = HashMap::new();
+        let mut faces = vec![];
+
+        let to_ordered = |v: Vertex| -> (OrderedFloat<f32>, OrderedFloat<f32>, OrderedFloat<f32>) {
+            (OrderedFloat::from(v.0[0]), OrderedFloat::from(v.0[1]), OrderedFloat::from(v.0[2]))
+        };
+
+        for facet in facets {
+            let face_i = faces.len();
+
+            // Build up the list of vertices, de-duplicating them if need be.
+            let vs : Vec<usize> = (0..3usize).map( |i| {
+                let key = to_ordered(facet.tri[i]);
+
+                let vert = VertexModel(Vertex3::from(facet.tri[i].0));
+
+                if !vert_lookup.contains_key(&key) {
+                    vert_lookup.insert(key, vert_lookup.len());
+                    vertices.push(VertexInfo{ vtx: vert, faces: vec![] });
+                }
+
+                let vert_i = vert_lookup.get(&key).unwrap();
+
+                vertices.get_mut(*vert_i).unwrap().faces.push(face_i);
+
+                *vert_i
+            }).collect();
+
+            faces.push(FaceInfo{ vertices: [vs[0], vs[1], vs[2]] });
+        }
+
+        Self{faces, vertices}
     }
 }
