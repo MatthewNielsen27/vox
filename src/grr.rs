@@ -1,6 +1,7 @@
 use std::iter::{zip};
 
 use std::mem;
+use std::ops::Bound;
 
 use nalgebra as na;
 use nalgebra::Point3;
@@ -13,6 +14,7 @@ use crate::raster;
 use crate::raster::linspace_sample;
 use crate::surface::Surface;
 use crate::camera::CameraInfo;
+use crate::clipping::{BoundingSphere, ClipType, get_clip_type, get_clipping_planes};
 
 pub fn line_between(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     return if (p2.y - p1.y).abs() < (p2.x - p1.x).abs() {
@@ -324,6 +326,31 @@ pub fn render_model(
     let proj = proj.to_homogeneous();
 
     let light = Point3::from([0.0, -100.0, 50.0]);
+
+    let tris_view : Vec<(Point3<f32>,Point3<f32>,Point3<f32>)> = model.triangles_world().map(|tri| {
+        (
+            view.transform_point(&tri.0.0),
+            view.transform_point(&tri.1.0),
+            view.transform_point(&tri.2.0)
+        )
+    }).collect();
+
+    let mut points = vec![];
+    for tri in tris_view {
+        points.push(tri.0);
+        points.push(tri.1);
+        points.push(tri.2);
+    }
+
+    // We get to return early in this case...
+    let bs = BoundingSphere::from(&points[..]);
+    for plane in &get_clipping_planes(&proj) {
+
+        let ct = get_clip_type(&bs, plane);
+        if ct == ClipType::NopeAllBehind {
+            return;
+        }
+    }
 
     // todo: decide on the right time to operate upon indices
     for tri in model.triangles_world() {

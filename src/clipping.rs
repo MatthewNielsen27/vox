@@ -1,5 +1,5 @@
 use std::mem;
-use nalgebra::{Point3};
+use nalgebra::{Point3, Vector3};
 
 use crate::geometry::{IntersectionType, Plane, Ray, Triangle};
 
@@ -13,6 +13,78 @@ pub enum ClipType {
     NopeAllBehind,
     NopeAllFront,
     Clip
+}
+
+// Returns the clipping planes for the given matrix
+pub fn get_clipping_planes(mat: &nalgebra::Matrix4<f32>) -> Vec<Plane> {
+    vec![
+        // Left clipping plane
+        Plane {
+            n: Vector3::from(
+                [
+                    mat.m41 + mat.m11,
+                    mat.m42 + mat.m12,
+                    mat.m43 + mat.m13,
+                ]
+            ),
+            d: mat.m44 + mat.m14
+        }.normalized(),
+        // Right clipping plane
+        Plane {
+            n: Vector3::from(
+                [
+                    mat.m41 - mat.m11,
+                    mat.m42 - mat.m12,
+                    mat.m43 - mat.m13,
+                ]
+            ),
+            d: mat.m44 - mat.m14
+        }.normalized(),
+        // Top clipping plane
+        Plane {
+            n: Vector3::from(
+                [
+                    mat.m41 - mat.m21,
+                    mat.m42 - mat.m22,
+                    mat.m43 - mat.m23,
+                ]
+            ),
+            d: mat.m44 - mat.m14
+        }.normalized(),
+        // Bottom clipping plane
+        Plane {
+            n: Vector3::from(
+                [
+                    mat.m41 + mat.m21,
+                    mat.m42 + mat.m22,
+                    mat.m43 + mat.m23,
+                ]
+            ),
+            d: mat.m44 + mat.m14
+        }.normalized(),
+        // Near clipping plane
+        Plane {
+            n: Vector3::from(
+                [
+                    mat.m41 + mat.m31,
+                    mat.m42 + mat.m32,
+                    mat.m43 + mat.m33,
+                ]
+            ),
+            d: mat.m44 + mat.m34
+        }.normalized(),
+        // Far clipping plane
+        Plane {
+            n: Vector3::from(
+                [
+                    mat.m41 - mat.m31,
+                    mat.m42 - mat.m32,
+                    mat.m43 - mat.m33,
+                ]
+            ),
+            d: mat.m44 - mat.m34
+        }.normalized()
+    ]
 }
 
 /// returns the ClipType for a given BoundingSphere and a plane

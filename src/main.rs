@@ -12,7 +12,7 @@ fn main() {
     let mut surface = Surface::new(400, 300);
 
     let camera = CameraInfo {
-        eye:    na::Point3::new(0.0, 0.0, 3.0),
+        eye:    na::Point3::new(0.0, 0.0, 4.0),
         target: na::Point3::new(0.0, 0.0, 0.0)
     };
 

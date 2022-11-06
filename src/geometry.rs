@@ -31,6 +31,17 @@ pub enum IntersectionType {
 }
 
 impl Plane {
+    pub fn normalized(&self) -> Self {
+        let mag = self.n.norm();
+
+        assert_ne!(mag, 0.0);
+
+        Self {
+            n: self.n / mag,
+            d: self.d / mag
+        }
+    }
+
     /// returns the signed-distance from the point to the plane
     pub fn distance(&self, p: &Point3<f32>) -> f32 {
         let top : f32 = (self.n.x * p.x) + (self.n.y * p.y) + (self.n.z * p.z) + self.d;
