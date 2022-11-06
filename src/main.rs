@@ -37,5 +37,5 @@ fn main() {
     grr::render_model(&model, &camera, &proj, &mut surface, &[0, 255, 0]);
 
 
-    surface.to_img().save("foo.png").unwrap();
+    surface.to_img().save("scene.png").unwrap();
 }
