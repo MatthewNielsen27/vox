@@ -10,7 +10,7 @@ pub struct VertexModel(pub Vertex3);
 pub struct VertexWorld(pub Vertex3);
 
 impl VertexModel {
-    pub fn to_world(&self, world_from_model: &na::Isometry3<f32>) -> VertexWorld {
+    pub fn to_world(&self, world_from_model: &na::Similarity3<f32>) -> VertexWorld {
         VertexWorld(
             world_from_model.transform_point(&self.0)
         )
@@ -47,7 +47,7 @@ impl Mesh {
 #[derive(Clone)]
 pub struct Model {
     pub mesh: Arc<Mesh>,
-    pub transform: na::Isometry3<f32>
+    pub transform: na::Similarity3<f32>
 }
 
 impl Model {

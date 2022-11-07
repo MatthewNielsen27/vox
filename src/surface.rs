@@ -42,7 +42,8 @@ impl Surface {
 
     /// [returns] z-buffer value for (x,y) coordinate.
     pub fn get_z(&self, x: usize, y: usize) -> f32 {
-        self.z_buffer[self.get_index(x,y)]
+        let i = self.get_index(x,y);
+        self.z_buffer[i]
     }
 
     pub fn set_z(&mut self, x: usize, y: usize, z: f32) {
@@ -66,7 +67,6 @@ impl Surface {
     }
 
     pub fn to_pixel(&self, p: &Vertex3Ndc) -> (Pixel, f32) {
-        assert!(p.is_valid());
         (
             Pixel {
                 x: (((1.0 + p.0.x) * self.shape.0 as f32) / 2.0) as i32,

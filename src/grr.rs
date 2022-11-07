@@ -1,7 +1,6 @@
 use std::iter::{zip};
 
 use std::mem;
-use std::ops::Bound;
 
 use nalgebra as na;
 use nalgebra::Point3;
@@ -14,7 +13,8 @@ use crate::raster;
 use crate::raster::linspace_sample;
 use crate::surface::Surface;
 use crate::camera::CameraInfo;
-use crate::clipping::{BoundingSphere, ClipType, get_clip_type, get_clipping_planes};
+use crate::clipping::{BoundingSphere, clip_triangle, ClippedTriangle, ClipType, get_clip_type, get_clipping_planes};
+use crate::geometry::Triangle;
 
 pub fn line_between(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     return if (p2.y - p1.y).abs() < (p2.x - p1.x).abs() {
@@ -277,7 +277,7 @@ pub fn scanlines_with_attributes(&raw_tri: &raster::Triangle2D, raw_attr: &[f32;
 
 pub fn render_tri(
     surface: &mut Surface,
-    tri: &geometry::Triangle<Vertex3Ndc>,
+    tri: &Triangle<Vertex3Ndc>,
     col: &[u8; 3]
 ) {
     // Step 1: Convert the triangle into a 2D triangle with z-attributes
@@ -294,6 +294,9 @@ pub fn render_tri(
         for (x, z) in linspace_sample(line.l.x, z_range.0, line.r.x, z_range.1) {
             let x = x as usize;
             let z = 1.0 / z;
+
+            if x >= surface.shape.0 { continue; }
+            if y >= surface.shape.1 { continue; }
 
             let z_current = surface.get_z(x, y);
             if z > z_current {
@@ -336,7 +339,7 @@ pub fn render_model(
     }).collect();
 
     let mut points = vec![];
-    for tri in tris_view {
+    for tri in &tris_view {
         points.push(tri.0);
         points.push(tri.1);
         points.push(tri.2);
@@ -345,18 +348,52 @@ pub fn render_model(
     // We get to return early in this case...
     let bs = BoundingSphere::from(&points[..]);
     for plane in &get_clipping_planes(&proj) {
-
         let ct = get_clip_type(&bs, plane);
         if ct == ClipType::NopeAllBehind {
             return;
         }
     }
 
+    let mut clipped : Vec<Triangle<Point3<f32>>> = tris_view.into_iter().map(|ps| {
+        Triangle([ps.0, ps.1, ps.2])
+    }).collect();
+
+    for plane in &get_clipping_planes(&proj) {
+        let mut retained = vec![];
+
+        for tri in clipped {
+            match clip_triangle(plane, &tri) {
+                None => {},
+
+                Some(foo) => {
+                    match foo {
+                        (ClippedTriangle::NoClip, None) => {
+                            retained.push(tri);
+                        },
+
+                        (ClippedTriangle::DoubleReplacement(result), None) => {
+                            retained.push(result.tri)
+                        },
+
+                        (ClippedTriangle::SingleReplacement(new_triangle_1), Some(ClippedTriangle::DoubleReplacement(new_triangle_2))) => {
+                            retained.push(new_triangle_1.tri);
+                            retained.push(new_triangle_2.tri);
+                        },
+
+                        _ => { panic!("unhandled case!")}
+                    }
+                }
+            }
+        }
+
+        clipped = retained;
+    }
+
     // todo: decide on the right time to operate upon indices
-    for tri in model.triangles_world() {
-        let p0_view = view.transform_point(&tri.0.0);
-        let p1_view = view.transform_point(&tri.1.0);
-        let p2_view = view.transform_point(&tri.2.0);
+    for tri in clipped {
+        let p0_view = tri.0[0];
+        let p1_view = tri.0[1];
+        let p2_view = tri.0[2];
 
         // This is known as back-face culling
         if is_back_facing(&[p0_view, p1_view, p2_view], &(camera.eye - camera.target)) {
@@ -386,6 +423,6 @@ pub fn render_model(
         let p1 = Vertex3Ndc(proj.transform_point(&p1_view));
         let p2 = Vertex3Ndc(proj.transform_point(&p2_view));
 
-        render_tri(surface, &geometry::Triangle([p0, p1, p2]), &col);
+        render_tri(surface, &Triangle([p0, p1, p2]), &col);
     }
 }
