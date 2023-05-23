@@ -1,5 +1,5 @@
-use vox::raster::{Pixel, ScanlineH, Triangle2D};
-use vox::grr;
+use vox_graphics::raster::{Pixel, ScanlineH, Triangle2D};
+use vox_graphics::grr;
 
 /// returns true if the scanlines are monotonically increasing
 fn validate_scanline_monotonicity(items: &[ScanlineH]) -> bool {

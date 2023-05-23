@@ -1,13 +1,18 @@
-use std::sync::Arc;
-use crate::fwd::{Vertex3};
-
 use nalgebra as na;
+use ordered_float::OrderedFloat;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use vox_fwd::{Vec3, Pt3};
+use vox_stl::fwd::Facet;
+
+use crate::texture::MatcapTexture;
 
 #[derive(Copy, Clone)]
-pub struct VertexModel(pub Vertex3);
+pub struct VertexModel(pub Pt3);
 
 #[derive(Copy, Clone)]
-pub struct VertexWorld(pub Vertex3);
+pub struct VertexWorld(pub Pt3);
 
 impl VertexModel {
     pub fn to_world(&self, world_from_model: &na::Similarity3<f32>) -> VertexWorld {
@@ -47,7 +52,8 @@ impl Mesh {
 #[derive(Clone)]
 pub struct Model {
     pub mesh: Arc<Mesh>,
-    pub transform: na::Similarity3<f32>
+    pub transform: na::Similarity3<f32>,
+    pub texture: Arc<MatcapTexture>
 }
 
 impl Model {
@@ -70,17 +76,13 @@ impl Model {
     }
 }
 
-use vox_stl::fwd::{Facet, Vertex};
-use std::collections::HashMap;
-use ordered_float::OrderedFloat;
-
 impl Mesh {
     pub fn from_facets(facets: Vec<Facet>) -> Self {
         let mut vertices : Vec<VertexInfo> = vec![];
         let mut vert_lookup = HashMap::new();
         let mut faces = vec![];
 
-        let to_ordered = |v: Vertex| -> (OrderedFloat<f32>, OrderedFloat<f32>, OrderedFloat<f32>) {
+        let to_ordered = |v: vox_stl::fwd::Vertex| -> (OrderedFloat<f32>, OrderedFloat<f32>, OrderedFloat<f32>) {
             (OrderedFloat::from(v.0[0]), OrderedFloat::from(v.0[1]), OrderedFloat::from(v.0[2]))
         };
 
@@ -91,7 +93,7 @@ impl Mesh {
             let vs : Vec<usize> = (0..3usize).map( |i| {
                 let key = to_ordered(facet.tri[i]);
 
-                let vert = VertexModel(Vertex3::from(facet.tri[i].0));
+                let vert = VertexModel(Pt3::from(facet.tri[i].0));
 
                 if !vert_lookup.contains_key(&key) {
                     vert_lookup.insert(key, vert_lookup.len());

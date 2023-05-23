@@ -1,21 +1,22 @@
-use nalgebra::{Vector3, Point3};
+use vox_fwd::{Vec3, Pt3};
+
 extern crate nalgebra as na;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub struct Triangle<PointType>(pub [PointType; 3]);
 
 pub struct Plane {
-    pub n: Vector3<f32>,
+    pub n: Vec3,
     pub d: f32
 }
 
 pub struct Ray {
-    pub direction: Vector3<f32>,
-    pub point: Point3<f32>
+    pub direction: Vec3,
+    pub point: Pt3
 }
 
 impl Ray {
-    pub fn from_points(p1: &Point3<f32>, p2: &Point3<f32>) -> Self {
+    pub fn from_points(p1: &Pt3, p2: &Pt3) -> Self {
         Ray {
             direction: p1 - p2,
             point: *p1
@@ -43,13 +44,13 @@ impl Plane {
     }
 
     /// returns the signed-distance from the point to the plane
-    pub fn distance(&self, p: &Point3<f32>) -> f32 {
+    pub fn distance(&self, p: &Pt3) -> f32 {
         let top : f32 = (self.n.x * p.x) + (self.n.y * p.y) + (self.n.z * p.z) + self.d;
         let bottom : f32 = self.n.norm();
         top / bottom
     }
 
-    pub fn from(normal: &Vector3<f32>, point: &Vector3<f32>) -> Plane {
+    pub fn from(normal: &Vec3, point: &Vec3) -> Plane {
         let n = normal.normalize();
         let d = -1.0 * ((n.x * point.x) + (n.y * point.y) + (n.z * point.z));
         Plane { n, d }
@@ -57,13 +58,13 @@ impl Plane {
 
     /// returns a point on the plane either [x, 0, 0], [0, y, 0], or [0, 0, z] depending
     /// on whichever is safest (i.e. direction is nonzero).
-    pub fn get_some_point(&self) -> Point3<f32> {
+    pub fn get_some_point(&self) -> Pt3 {
         if self.n.x != 0.0 {
-            Point3::from([-1.0 * self.d / self.n.x, 0.0, 0.0])
+            Pt3::from([-1.0 * self.d / self.n.x, 0.0, 0.0])
         } else if self.n.y != 0.0  {
-            Point3::from([0.0, -1.0 * self.d / self.n.y, 0.0])
+            Pt3::from([0.0, -1.0 * self.d / self.n.y, 0.0])
         } else {
-            Point3::from([0.0, 0.0,  -1.0 * self.d / self.n.z])
+            Pt3::from([0.0, 0.0,  -1.0 * self.d / self.n.z])
         }
     }
 
@@ -72,7 +73,7 @@ impl Plane {
         &self,
         ray: &Ray
     )
-        -> (IntersectionType, Option<Point3<f32>>)
+        -> (IntersectionType, Option<Pt3>)
     {
         if self.n.dot(&ray.direction) == 0.0 {
             // todo: handle IntersectionType::Incidental in this case...
@@ -88,6 +89,6 @@ impl Plane {
 
         let point = ray.point - ray.direction.scale(prod3);
 
-        (IntersectionType::Single, Some(Point3::from([point.x, point.y, point.z])))
+        (IntersectionType::Single, Some(Pt3::from([point.x, point.y, point.z])))
     }
 }

@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek};
 
-use crate::fwd::{Facet, Vertex, Normal, Vec3};
+use crate::fwd::{Facet, Vertex, Normal, Pt3};
 
 /// These are the states of the ascii .stl parser state-machine.
 enum ParsingState {
@@ -55,7 +55,7 @@ pub fn facets_from_ascii_stl(file: &mut File) -> Result<Vec<Facet>, String> {
                         return Err(format!("[{}] expected: 'facet normal {{}} {{}} {{}}, got: {}", i, raw));
                     }
 
-                    current_facet.normal = Normal::from(Vec3(
+                    current_facet.normal = Normal::from(Pt3(
                         [
                             parts[2].parse::<f32>().unwrap(),
                             parts[3].parse::<f32>().unwrap(),
@@ -100,7 +100,7 @@ pub fn facets_from_ascii_stl(file: &mut File) -> Result<Vec<Facet>, String> {
                     return Err(format!("[{}] expected vertex, got {}", i, raw));
                 }
 
-                current_facet.tri[current_vertex_i] = Vertex::from(Vec3(
+                current_facet.tri[current_vertex_i] = Vertex::from(Pt3(
                     [
                         parts[1].parse::<f32>().unwrap(),
                         parts[2].parse::<f32>().unwrap(),

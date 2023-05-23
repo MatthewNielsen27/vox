@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 
-use crate::fwd::{Facet, Vec3};
+use crate::fwd::{Facet, Pt3};
 
 use byteorder::{ReadBytesExt, LittleEndian};
 
@@ -17,7 +17,7 @@ pub fn facets_from_binary_stl(file: &mut File) -> Result<Vec<Facet>, String> {
     let mut facets = vec![];
 
     for _ in 0..num_triangles {
-        let normal = Vec3(
+        let normal = Pt3(
             [
                 file.read_f32::<LittleEndian>().unwrap(),
                 file.read_f32::<LittleEndian>().unwrap(),
@@ -26,17 +26,17 @@ pub fn facets_from_binary_stl(file: &mut File) -> Result<Vec<Facet>, String> {
         );
 
         let tri = [
-            Vec3([
+            Pt3([
                 file.read_f32::<LittleEndian>().unwrap(),
                 file.read_f32::<LittleEndian>().unwrap(),
                 file.read_f32::<LittleEndian>().unwrap(),
             ]),
-            Vec3([
+            Pt3([
                 file.read_f32::<LittleEndian>().unwrap(),
                 file.read_f32::<LittleEndian>().unwrap(),
                 file.read_f32::<LittleEndian>().unwrap(),
             ]),
-            Vec3([
+            Pt3([
                 file.read_f32::<LittleEndian>().unwrap(),
                 file.read_f32::<LittleEndian>().unwrap(),
                 file.read_f32::<LittleEndian>().unwrap(),
@@ -52,5 +52,6 @@ pub fn facets_from_binary_stl(file: &mut File) -> Result<Vec<Facet>, String> {
 
         file.seek(SeekFrom::Current(2)).unwrap();
     }
+
     Ok(facets)
 }

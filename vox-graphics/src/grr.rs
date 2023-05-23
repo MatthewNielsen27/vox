@@ -1,20 +1,21 @@
-use std::iter::{zip};
+use std::iter::zip;
 
 use std::mem;
+use std::ops::Deref;
+
+use rayon::prelude::*;
 
 use nalgebra as na;
-use nalgebra::Point3;
-use nalgebra_glm::pi;
 
-use crate::geometry;
-use crate::fwd::{Vertex3Ndc, Vertex3};
-use crate::model::Model;
+use vox_fwd::{Pt3, Px2};
+
 use crate::raster;
 use crate::raster::linspace_sample;
 use crate::surface::Surface;
 use crate::camera::CameraInfo;
 use crate::clipping::{BoundingSphere, clip_triangle, ClippedTriangle, ClipType, get_clip_type, get_clipping_planes};
 use crate::geometry::Triangle;
+use crate::model::Model;
 
 pub fn line_between(p1: raster::Pixel, p2: raster::Pixel) -> Vec<raster::Pixel> {
     return if (p2.y - p1.y).abs() < (p2.x - p1.x).abs() {
@@ -190,6 +191,72 @@ pub fn scanlines_with_attributes(&raw_tri: &raster::Triangle2D, raw_attr: &[f32;
     }).collect()
 }
 
+pub mod dd {
+    use image::Rgb;
+    use crate::raster::Triangle2D;
+    use super::raster;
+    use super::{fill, line_between};
+
+    pub fn render_triangle_wireframe(
+        img: &mut image::RgbImage,
+        tri: &[[i32; 2]; 3],
+        col: &Rgb<u8>
+    ) {
+        let tri = Triangle2D::from_points(
+            &[
+                (tri[0][0], tri[0][1]),
+                (tri[1][0], tri[1][1]),
+                (tri[2][0], tri[2][1])
+            ]
+        );
+
+        [
+            line_between(tri.points[0], tri.points[1]),
+            line_between(tri.points[1], tri.points[2]),
+            line_between(tri.points[2], tri.points[0]),
+        ].map( |line| {
+            line.iter().for_each(|point| img.put_pixel(point.x as u32, point.y as u32, *col));
+        });
+    }
+
+    pub fn render_triangle_filled(
+        img: &mut image::RgbImage,
+        tri: &[[i32; 2]; 3],
+        col: &Rgb<u8>
+    ) {
+        let tri = Triangle2D::from_points(
+          &[
+              (tri[0][0], tri[0][1]),
+              (tri[1][0], tri[1][1]),
+              (tri[2][0], tri[2][1])
+          ]
+        );
+
+        for line in fill(&tri) {
+            for x in line.l.x..=line.r.x {
+                img.put_pixel(x as u32, line.l.y as u32, *col)
+            }
+        }
+    }
+
+    pub fn render_line(
+        img: &mut image::RgbImage,
+        p1: [i32; 2],
+        p2: [i32; 2],
+        col: &Rgb<u8>
+    ) {
+        let p1 = raster::Pixel{x: p1[0], y: p1[1]};
+        let p2 = raster::Pixel{x: p2[0], y: p2[1]};
+
+        for p in line_between(p1, p2) {
+            img.put_pixel(p.x as u32, p.y as u32, *col);
+        }
+
+        img.put_pixel(p1.x as u32, p1.y as u32, *col);
+        img.put_pixel(p2.x as u32, p2.y as u32, *col);
+    }
+}
+
 // pub fn render_line(img: &mut image::RgbImage, p1: raster::Pixel, p2: raster::Pixel) {
 //     for p in line_between(p1, p2) {
 //         render_pixel(img, p, Rgb([0, 255, 0]));
@@ -267,7 +334,7 @@ pub fn scanlines_with_attributes(&raw_tri: &raster::Triangle2D, raw_attr: &[f32;
 
 // pub fn render_tri_wireframe(
 //     surface: &mut Surface,
-//     tri: &geometry::Triangle<Vertex3Ndc>,
+//     tri: &geometry::Triangle<Pt3Ndc>,
 //     col: &[u8; 3]
 // ) {
 //     let (p0, z0) = surface.to_pixel(&tri.0[0]);
@@ -277,7 +344,7 @@ pub fn scanlines_with_attributes(&raw_tri: &raster::Triangle2D, raw_attr: &[f32;
 
 pub fn render_tri(
     surface: &mut Surface,
-    tri: &Triangle<Vertex3Ndc>,
+    tri: &Triangle<Pt3>,
     col: &[u8; 3]
 ) {
     // Step 1: Convert the triangle into a 2D triangle with z-attributes
@@ -310,43 +377,74 @@ pub fn render_tri(
 /// [returns]   True if the triangle (in view space) is back-facing.
 ///
 /// [note]      This is known as back-face-culling. For more information.
-pub fn is_back_facing(tri: &[Vertex3; 3], eye_ray: &na::Vector3<f32>) -> bool {
+pub fn is_back_facing(tri: &[Pt3; 3], eye_ray: &na::Vector3<f32>) -> bool {
     let d1 = tri[1] - tri[0];
     let d2 = tri[2] - tri[0];
     let normal = d1.cross(&d2).xyz();
-    normal.dot(&(eye_ray - tri[0].coords)) <= 0.0
+    normal.dot(&(eye_ray - tri[0].coords)) < 0.0
 }
 
 pub fn render_model(
     model: &Model,
     camera: &CameraInfo,
     proj: &na::Perspective3<f32>,
-    surface: &mut Surface,
-    col: &[u8; 3]
+    surface: &mut Surface
 ) {
-    let view = camera.get_view_matrix();
+    let view = &camera.view_matrix;
 
     let proj = proj.to_homogeneous();
 
-    let light = Point3::from([0.0, -100.0, 50.0]);
+    let light = Pt3::from([0.0, -100.0, 50.0]);
 
-    let tris_view : Vec<(Point3<f32>,Point3<f32>,Point3<f32>)> = model.triangles_world().map(|tri| {
-        (
-            view.transform_point(&tri.0.0),
-            view.transform_point(&tri.1.0),
-            view.transform_point(&tri.2.0)
-        )
-    }).collect();
+    let modelView = view * model.transform;
 
-    let mut points = vec![];
-    for tri in &tris_view {
-        points.push(tri.0);
-        points.push(tri.1);
-        points.push(tri.2);
-    }
+    let points_view : Vec<Pt3> = model.mesh.vertices.par_iter().map(
+        |v| { modelView.transform_point(&v.vtx.0) }
+    ).collect();
+
+    let points_ndc : Vec<Pt3> = points_view.par_iter().map(
+        |v| { proj.transform_point(&v) }
+    ).collect();
+
+    let out_of_bounds = |pt_ndc: &Pt3| {
+        return f32::abs(pt_ndc.x) > 1.0
+            || f32::abs(pt_ndc.y) > 1.0
+            || f32::abs(pt_ndc.z) > 1.0;
+    };
+
+    let screen_ray = camera.screen_ray(&Px2::from([0, 0])).1;
+
+    // This is known as back-face culling
+    // if is_back_facing(&[p0_view, p1_view, p2_view], &screen_ray) {
+    // }
+
+    let mut clipped : Vec<Triangle<Pt3>> = model.mesh.faces.par_iter().filter_map(
+        |face| {
+            let should_discard =
+                out_of_bounds(&points_ndc[face.vertices[0]]) &&
+                out_of_bounds(&points_ndc[face.vertices[1]]) &&
+                out_of_bounds(&points_ndc[face.vertices[2]]);
+
+            if should_discard {
+                return None;
+            }
+
+            let tri_view = [
+                points_view[face.vertices[0]],
+                points_view[face.vertices[1]],
+                points_view[face.vertices[2]]
+            ];
+
+            if is_back_facing(&tri_view, &screen_ray) {
+                return None;
+            }
+
+            Some(Triangle(tri_view))
+        }
+    ).collect();
 
     // We get to return early in this case...
-    let bs = BoundingSphere::from(&points[..]);
+    let bs = BoundingSphere::from(&points_view[..]);
     for plane in &get_clipping_planes(&proj) {
         let ct = get_clip_type(&bs, plane);
         if ct == ClipType::NopeAllBehind {
@@ -354,37 +452,35 @@ pub fn render_model(
         }
     }
 
-    let mut clipped : Vec<Triangle<Point3<f32>>> = tris_view.into_iter().map(|ps| {
-        Triangle([ps.0, ps.1, ps.2])
-    }).collect();
-
     for plane in &get_clipping_planes(&proj) {
-        let mut retained = vec![];
+        let retained = clipped
+            .par_iter()
+            .filter_map(
+                |tri| -> Option<Vec<Triangle<Pt3>>> {
+                    match clip_triangle(plane, &tri) {
+                        None => { None },
 
-        for tri in clipped {
-            match clip_triangle(plane, &tri) {
-                None => {},
+                        Some(foo) => {
+                            match foo {
+                                (ClippedTriangle::NoClip, None) => {
+                                    Some(vec![tri.clone()])
+                                },
 
-                Some(foo) => {
-                    match foo {
-                        (ClippedTriangle::NoClip, None) => {
-                            retained.push(tri);
-                        },
+                                (ClippedTriangle::DoubleReplacement(result), None) => {
+                                    Some(vec![result.tri])
+                                },
 
-                        (ClippedTriangle::DoubleReplacement(result), None) => {
-                            retained.push(result.tri)
-                        },
-
-                        (ClippedTriangle::SingleReplacement(new_triangle_1), Some(ClippedTriangle::DoubleReplacement(new_triangle_2))) => {
-                            retained.push(new_triangle_1.tri);
-                            retained.push(new_triangle_2.tri);
-                        },
-
-                        _ => { panic!("unhandled case!")}
+                                (ClippedTriangle::SingleReplacement(new_triangle_1), Some(ClippedTriangle::DoubleReplacement(new_triangle_2))) => {
+                                    Some(vec![new_triangle_1.tri, new_triangle_2.tri])
+                                    // retained.push(new_triangle_1.tri);
+                                    // retained.push(new_triangle_2.tri);
+                                },
+                                _ => { panic!("unhandled case!");}
+                            }
+                        }
                     }
                 }
-            }
-        }
+            ).flatten().collect();
 
         clipped = retained;
     }
@@ -395,33 +491,30 @@ pub fn render_model(
         let p1_view = tri.0[1];
         let p2_view = tri.0[2];
 
-        // This is known as back-face culling
-        if is_back_facing(&[p0_view, p1_view, p2_view], &(camera.eye - camera.target)) {
-            continue
-        }
-
         // todo: this will be replaced by a fragment shader
         let d1 = p1_view - p0_view;
         let d2 = p2_view - p0_view;
         let normal = d1.cross(&d2).xyz().normalize();
 
-        let light_ray = (p0_view - light).normalize();
+        // let light_ray = (p0_view - light).normalize();
+        //
+        // let theta = (normal.dot(&light_ray) / (normal.norm() * light_ray.norm())).acos();
+        // let theta_mult = theta / pi::<f32>();
 
-        let theta = (normal.dot(&light_ray) / (normal.norm() * light_ray.norm())).acos();
-        let theta_mult = theta / pi::<f32>();
+        // let normal_model = view.inverse_transform_vector((&normal).into());
 
-        let col = [
-            (col[0] as f32 * theta_mult) as u8,
-            (col[1] as f32 * theta_mult) as u8,
-            (col[2] as f32 * theta_mult) as u8
-        ];
+        let col = model.texture.deref().sample_normal(&normal.xyz()).0;
 
-        // Step 2: clip triangles that are outside the frame.
+        // let col = [
+        //     (col[0] as f32 * theta_mult) as u8,
+        //     (col[1] as f32 * theta_mult) as u8,
+        //     (col[2] as f32 * theta_mult) as u8
+        // ];
 
         // Step 3: convert the triangle into NDC space.
-        let p0 = Vertex3Ndc(proj.transform_point(&p0_view));
-        let p1 = Vertex3Ndc(proj.transform_point(&p1_view));
-        let p2 = Vertex3Ndc(proj.transform_point(&p2_view));
+        let p0 = proj.transform_point(&p0_view);
+        let p1 = proj.transform_point(&p1_view);
+        let p2 = proj.transform_point(&p2_view);
 
         render_tri(surface, &Triangle([p0, p1, p2]), &col);
     }

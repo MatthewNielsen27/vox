@@ -1,10 +1,12 @@
 use std::mem;
-use nalgebra::{Point3, Vector3};
+use std::path::Iter;
+use image::codecs::png::CompressionType::Default;
 
+use vox_fwd::{Vec3, Pt3};
 use crate::geometry::{IntersectionType, Plane, Ray, Triangle};
 
 pub struct BoundingSphere {
-    pub center: Point3<f32>,
+    pub center: Pt3,
     pub radius: f32
 }
 
@@ -20,7 +22,7 @@ pub fn get_clipping_planes(mat: &nalgebra::Matrix4<f32>) -> Vec<Plane> {
     vec![
         // Left clipping plane
         Plane {
-            n: Vector3::from(
+            n: Vec3::from(
                 [
                     mat.m41 + mat.m11,
                     mat.m42 + mat.m12,
@@ -31,7 +33,7 @@ pub fn get_clipping_planes(mat: &nalgebra::Matrix4<f32>) -> Vec<Plane> {
         }.normalized(),
         // Right clipping plane
         Plane {
-            n: Vector3::from(
+            n: Vec3::from(
                 [
                     mat.m41 - mat.m11,
                     mat.m42 - mat.m12,
@@ -42,7 +44,7 @@ pub fn get_clipping_planes(mat: &nalgebra::Matrix4<f32>) -> Vec<Plane> {
         }.normalized(),
         // Top clipping plane
         Plane {
-            n: Vector3::from(
+            n: Vec3::from(
                 [
                     mat.m41 - mat.m21,
                     mat.m42 - mat.m22,
@@ -53,7 +55,7 @@ pub fn get_clipping_planes(mat: &nalgebra::Matrix4<f32>) -> Vec<Plane> {
         }.normalized(),
         // Bottom clipping plane
         Plane {
-            n: Vector3::from(
+            n: Vec3::from(
                 [
                     mat.m41 + mat.m21,
                     mat.m42 + mat.m22,
@@ -64,7 +66,7 @@ pub fn get_clipping_planes(mat: &nalgebra::Matrix4<f32>) -> Vec<Plane> {
         }.normalized(),
         // Near clipping plane
         Plane {
-            n: Vector3::from(
+            n: Vec3::from(
                 [
                     mat.m41 + mat.m31,
                     mat.m42 + mat.m32,
@@ -75,7 +77,7 @@ pub fn get_clipping_planes(mat: &nalgebra::Matrix4<f32>) -> Vec<Plane> {
         }.normalized(),
         // Far clipping plane
         Plane {
-            n: Vector3::from(
+            n: Vec3::from(
                 [
                     mat.m41 - mat.m31,
                     mat.m42 - mat.m32,
@@ -101,14 +103,14 @@ pub fn get_clip_type(sphere: &BoundingSphere, plane: &Plane) -> ClipType {
 
 #[derive(Debug, PartialEq)]
 pub struct TriangleWith2Replaced {
-    pub tri: Triangle<Point3<f32>>,
+    pub tri: Triangle<Pt3>,
     pub replacement_a: (usize, (usize, usize)),
     pub replacement_b: (usize, (usize, usize))
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TriangleWith1Replaced {
-    pub tri: Triangle<Point3<f32>>,
+    pub tri: Triangle<Pt3>,
     pub replacement: (usize, (usize, usize))
 }
 
@@ -125,7 +127,7 @@ pub enum ClippedTriangle {
 ///       without losing metadata... (i.e. shading value...)
 pub fn clip_triangle(
     plane: &Plane,
-    tri: &Triangle<Point3<f32>>
+    tri: &Triangle<Pt3>
 )
     -> Option<(ClippedTriangle, Option<ClippedTriangle>)>
 {
@@ -179,6 +181,7 @@ pub fn clip_triangle(
                 new_triangle_2.0[i_1] = point;
             },
             (_, _) => {
+                return None;
                 panic!("Expected a single ray intersection with the plane.");
             }
         }
@@ -188,6 +191,7 @@ pub fn clip_triangle(
                 new_triangle_2.0[i_2] = point;
             },
             (_, _) => {
+                return None;
                 panic!("Expected a single ray intersection with the plane.");
             }
         }
@@ -238,6 +242,7 @@ pub fn clip_triangle(
                     new_tri.0[i] = point;
                 },
                 (_, _) => {
+                    return None;
                     panic!("Expected a single ray intersection with the plane.");
                 }
             }
@@ -255,8 +260,8 @@ pub fn clip_triangle(
 
 impl BoundingSphere {
     /// returns a BoundingSphere for the given set of points
-    pub fn from(points: &[Point3<f32>]) -> BoundingSphere {
-        let mut center = Point3::<f32>::default();
+    pub fn from(points: &[Pt3]) -> BoundingSphere {
+        let mut center = Pt3::default();
         points.iter().for_each(|p| {
             // todo: maybe we need to impl the Add trait here so we can create a new point.
             center.x += p.x;
